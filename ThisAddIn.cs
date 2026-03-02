@@ -1,27 +1,80 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Xml.Linq;
-using Microsoft.Office.Core;
-using Microsoft.Office.Interop.Outlook;
-using System.Windows.Forms;
 using System.IO;
+using System.Windows.Forms;
+using Microsoft.Office.Interop.Outlook;
+using Microsoft.Office.Core;
 
 namespace jimsoutlooktools
 {
     public partial class ThisAddIn
     {
-        private void ThisAddIn_Startup(object sender, System.EventArgs e)
-        {
-            // Ribbon API 替代 CommandBar
-        }
+        private CommandBarButton _downloadButton;
+        private CommandBar _toolbar;
+        private const string ToolbarName = "邮件附件工具";
 
-        private void DownloadAttachmentButton_Click(object sender, EventArgs e)
+        private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
             try
             {
-                // 选择保存附件的根目录
+                // 等待Outlook完全加载
+                ((ApplicationEvents_11_Event)Application).Startup += Application_Startup;
+            }
+            catch
+            {
+                // 如果Startup事件已触发，直接创建工具栏
+                CreateToolbar();
+            }
+        }
+
+        private void Application_Startup()
+        {
+            CreateToolbar();
+        }
+
+        private void CreateToolbar()
+        {
+            try
+            {
+                if (Application.ActiveExplorer() == null)
+                    return;
+
+                CommandBars commandBars = Application.ActiveExplorer().CommandBars;
+
+                // 如果工具栏已存在，先删除
+                try
+                {
+                    _toolbar = commandBars[ToolbarName];
+                    _toolbar.Delete();
+                }
+                catch { }
+
+                // 创建新工具栏
+                _toolbar = commandBars.Add(ToolbarName, MsoBarPosition.msoBarTop, false, true);
+
+                // 添加按钮
+                _downloadButton = (CommandBarButton)_toolbar.Controls.Add(
+                    MsoControlType.msoControlButton,
+                    System.Type.Missing,
+                    System.Type.Missing,
+                    1,
+                    true);
+
+                _downloadButton.Caption = "保存附件";
+                _downloadButton.Style = MsoButtonStyle.msoButtonCaption;
+                _downloadButton.Click += new _CommandBarButtonEvents_ClickEventHandler(DownloadButton_Click);
+
+                _toolbar.Visible = true;
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"创建工具栏失败: {ex.Message}");
+            }
+        }
+
+        private void DownloadButton_Click(CommandBarButton Ctrl, ref bool CancelDefault)
+        {
+            try
+            {
                 using (var folderDialog = new FolderBrowserDialog())
                 {
                     folderDialog.Description = "请选择附件保存的根文件夹";
@@ -33,7 +86,6 @@ namespace jimsoutlooktools
 
                     string saveRoot = folderDialog.SelectedPath;
 
-                    // 选择日期范围
                     DateTime startDate, endDate;
                     if (!SelectDateRange(out startDate, out endDate))
                     {
@@ -41,15 +93,12 @@ namespace jimsoutlooktools
                         return;
                     }
 
-                    // 获取收件箱邮件
                     MAPIFolder inbox = Application.Session.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
                     Items items = inbox.Items;
 
-                    // 初始化统计数据
                     int savedCount = 0;
                     int skippedCount = 0;
 
-                    // 显示进度条
                     using (var progressForm = new ProgressForm())
                     {
                         progressForm.Show();
@@ -82,16 +131,14 @@ namespace jimsoutlooktools
                                 }
                             }
 
-                            // 更新进度条
                             progressForm.IncrementProgress();
                         }
                     }
 
-                    // 显示统计结果
                     MessageBox.Show($"保存完成！已保存 {savedCount} 个附件，跳过 {skippedCount} 个附件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
-            catch (System.Exception ex) // 明确使用 System.Exception
+            catch (System.Exception ex)
             {
                 MessageBox.Show($"发生错误: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -134,15 +181,18 @@ namespace jimsoutlooktools
 
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
         {
-            // Ribbon API 不需要显式清理
+            try
+            {
+                if (_toolbar != null)
+                {
+                    _toolbar.Delete();
+                }
+            }
+            catch { }
         }
 
         #region VSTO 生成的代码
 
-        /// <summary>
-        /// 设计器支持所需的方法 - 不要修改
-        /// 使用代码编辑器修改此方法的内容。
-        /// </summary>
         private void InternalStartup()
         {
             this.Startup += new System.EventHandler(ThisAddIn_Startup);
