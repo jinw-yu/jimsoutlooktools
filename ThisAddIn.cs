@@ -11,7 +11,7 @@ namespace jimsoutlooktools
         private CommandBarButton _downloadButton;
         private CommandBar _toolbar;
         private const string ToolbarName = "jimsoutlooktools";
-        private const string AppVersion = "v1.0.1";
+        private const string AppVersion = "v1.0.2";
 
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
@@ -87,31 +87,48 @@ namespace jimsoutlooktools
 
                 MAPIFolder inbox = Application.Session.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
                 Items items = inbox.Items;
+                // 限制只获取必要字段，减少内存占用
+                items.IncludeRecurrences = false;
 
-                    int savedCount = 0;
-                    int skippedCount = 0;
+                int savedCount = 0;
+                int skippedCount = 0;
+                int processedCount = 0;
 
-                    using (var progressForm = new ProgressForm(AppVersion))
+                using (var progressForm = new ProgressForm(AppVersion))
+                {
+                    progressForm.Show();
+                    progressForm.SetProgress(0, items.Count);
+
+                    // 使用 for 循环代替 foreach，更好地控制 COM 对象释放
+                    for (int i = 1; i <= items.Count; i++)
                     {
-                        progressForm.Show();
-                        progressForm.SetProgress(0, items.Count);
+                        object item = null;
+                        MailItem mailItem = null;
+                        Attachments attachments = null;
 
-                        foreach (object item in items)
+                        try
                         {
-                            if (item is MailItem mailItem)
-                            {
-                                if (mailItem.ReceivedTime >= startDate && mailItem.ReceivedTime <= endDate)
-                                {
-                                    string monthFolder = Path.Combine(saveRoot, mailItem.ReceivedTime.ToString("yyyyMM"));
-                                    Directory.CreateDirectory(monthFolder);
+                            item = items[i];
+                            mailItem = item as MailItem;
 
-                                    foreach (Attachment attachment in mailItem.Attachments)
+                            if (mailItem != null && mailItem.ReceivedTime >= startDate && mailItem.ReceivedTime <= endDate)
+                            {
+                                string monthFolder = Path.Combine(saveRoot, mailItem.ReceivedTime.ToString("yyyyMM"));
+                                Directory.CreateDirectory(monthFolder);
+
+                                attachments = mailItem.Attachments;
+                                for (int j = 1; j <= attachments.Count; j++)
+                                {
+                                    Attachment attachment = null;
+                                    try
                                     {
+                                        attachment = attachments[j];
+
                                         // 跳过内联图片（小于100KB的图片文件通常是邮件正文中的图标、表情等）
                                         string ext = Path.GetExtension(attachment.FileName).ToLower();
-                                        bool isImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" || 
+                                        bool isImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
                                                        ext == ".gif" || ext == ".bmp" || ext == ".ico" || ext == ".webp";
-                                        
+
                                         if (isImage && attachment.Size < 102400) // 小于100KB的图片跳过
                                         {
                                             continue;
@@ -133,12 +150,51 @@ namespace jimsoutlooktools
                                             savedCount++;
                                         }
                                     }
+                                    finally
+                                    {
+                                        // 释放附件 COM 对象
+                                        if (attachment != null)
+                                        {
+                                            System.Runtime.InteropServices.Marshal.ReleaseComObject(attachment);
+                                        }
+                                    }
+                                }
+                                processedCount++;
+
+                                // 每处理 50 封邮件强制垃圾回收一次
+                                if (processedCount % 50 == 0)
+                                {
+                                    GC.Collect();
+                                    GC.WaitForPendingFinalizers();
                                 }
                             }
+                        }
+                        finally
+                        {
+                            // 释放 COM 对象
+                            if (attachments != null)
+                            {
+                                System.Runtime.InteropServices.Marshal.ReleaseComObject(attachments);
+                            }
+                            if (mailItem != null)
+                            {
+                                System.Runtime.InteropServices.Marshal.ReleaseComObject(mailItem);
+                            }
+                            if (item != null)
+                            {
+                                System.Runtime.InteropServices.Marshal.ReleaseComObject(item);
+                            }
+                        }
 
-                            progressForm.IncrementProgress();
+                        progressForm.SetProgress(i, items.Count);
+
+                        // 每 100 封邮件让 UI 刷新一下，避免假死
+                        if (i % 100 == 0)
+                        {
+                            System.Windows.Forms.Application.DoEvents();
                         }
                     }
+                }
 
                     MessageBox.Show($"保存完成！已保存 {savedCount} 个附件，跳过 {skippedCount} 个已存在附件。", $"jimsoutlooktools {AppVersion}", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -213,7 +269,7 @@ namespace jimsoutlooktools
     {
         private ProgressBar progressBar;
 
-        public ProgressForm(string appVersion = "v1.0.1")
+        public ProgressForm(string appVersion = "v1.0.2")
         {
             this.Text = $"jimsoutlooktools {appVersion} - 保存进度";
             this.Width = 400;
@@ -260,7 +316,7 @@ namespace jimsoutlooktools
         public DateTime EndDate { get; private set; }
         public string SavePath { get; private set; }
 
-        public DateRangePickerForm(string appVersion = "v1.0.1")
+        public DateRangePickerForm(string appVersion = "v1.0.2")
         {
             this.Text = $"jimsoutlooktools {appVersion} - 保存邮件附件";
             this.Width = 450;
