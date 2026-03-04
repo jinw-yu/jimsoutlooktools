@@ -1479,7 +1479,7 @@ namespace jtools_outlook
     {
         public AboutForm()
         {
-            this.Text = "关于 JTools";
+            this.Text = "关于 JTools-outlook";
             this.Width = 450;
             this.Height = 380;
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -1498,7 +1498,7 @@ namespace jtools_outlook
             // 应用名称
             var lblTitle = new Label
             {
-                Text = "JTools",
+                Text = "JTools-outlook",
                 Dock = DockStyle.Fill,
                 TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
                 Font = new System.Drawing.Font("Microsoft Sans Serif", 20, System.Drawing.FontStyle.Bold),
