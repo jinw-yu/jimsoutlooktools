@@ -11,7 +11,7 @@ namespace jimsoutlooktools
 {
     public partial class RibbonTools
     {
-        private const string AppVersion = "v1.0.4";
+        private const string AppVersion = "v1.0.5";
 
         private void RibbonTools_Load(object sender, RibbonUIEventArgs e)
         {
@@ -61,7 +61,7 @@ namespace jimsoutlooktools
 
                 int currentItemIndex = 0;
 
-                using (var progressForm = new ProgressForm(AppVersion))
+                using (var progressForm = new ProgressForm())
                 {
                     progressForm.Show();
                     progressForm.SetProgress(0, totalItems);
@@ -96,7 +96,7 @@ namespace jimsoutlooktools
         }
         catch (System.Exception ex)
         {
-            MessageBox.Show($"发生错误: {ex.Message}", $"jimsoutlooktools {AppVersion}", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"发生错误: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -266,14 +266,14 @@ namespace jimsoutlooktools
             // 如果失败数量较多，使用滚动文本框显示
             if (failedCount > 5)
             {
-                using (var resultForm = new SaveResultForm(AppVersion, message.ToString()))
+                using (var resultForm = new SaveResultForm(message.ToString()))
                 {
                     resultForm.ShowDialog();
                 }
             }
             else
             {
-                MessageBox.Show(message.ToString(), $"jimsoutlooktools {AppVersion} - 保存结果", 
+                MessageBox.Show(message.ToString(), "保存结果",
                     MessageBoxButtons.OK, failedCount > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
             }
         }
@@ -286,7 +286,7 @@ namespace jimsoutlooktools
             saveInbox = true;
             saveSentItems = false;
 
-            using (var form = new DateRangePickerForm(AppVersion))
+            using (var form = new DateRangePickerForm())
             {
                 if (form.ShowDialog() == DialogResult.OK)
                 {
@@ -328,179 +328,288 @@ namespace jimsoutlooktools
         {
             try
             {
-                using (var selectForm = new DataFileSelectForm(Globals.ThisAddIn.Application))
+                // 使用新的向导窗口
+                using (var wizardForm = new DownloadOnlineWizardForm(Globals.ThisAddIn.Application))
                 {
-                    if (selectForm.ShowDialog() != DialogResult.OK)
-                        return;
-
-                    Outlook.MAPIFolder sourceRoot = selectForm.SourceRootFolder;
-                    Outlook.MAPIFolder targetRoot = selectForm.TargetRootFolder;
-
-                    if (sourceRoot == null || targetRoot == null)
-                    {
-                        MessageBox.Show("请选择有效的源数据文件和目标数据文件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    }
-
-                    // 分析文件夹差异（显示进度）
-                    var folderDiffs = AnalyzeFolderDifferencesWithProgress(sourceRoot, targetRoot);
-
-                    if (folderDiffs.Count == 0)
-                    {
-                        MessageBox.Show("两个数据文件的文件夹结构相同，没有需要同步的差异。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        return;
-                    }
-
-                    // 显示差异并让用户选择要同步的文件夹
-                    using (var diffForm = new FolderDiffForm(folderDiffs))
-                    {
-                        if (diffForm.ShowDialog() != DialogResult.OK)
-                            return;
-
-                        var selectedFolders = diffForm.SelectedFolders;
-                        if (selectedFolders.Count == 0)
-                        {
-                            MessageBox.Show("未选择任何文件夹进行同步。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                            return;
-                        }
-
-                        // 开始同步
-                        SyncFolders(selectedFolders, sourceRoot, targetRoot);
-                    }
+                    wizardForm.ShowDialog();
                 }
             }
             catch (System.Exception ex)
             {
-                MessageBox.Show($"发生错误: {ex.Message}", $"jimsoutlooktools {AppVersion}", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"发生错误: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
+        /// <summary>
+        /// 分析两个数据文件的文件夹差异 - 简单直接对比，无过滤
+        /// </summary>
         private List<FolderDiffInfo> AnalyzeFolderDifferencesWithProgress(Outlook.MAPIFolder sourceRoot, Outlook.MAPIFolder targetRoot)
         {
             var result = new List<FolderDiffInfo>();
 
-            using (var progressForm = new AnalysisProgressForm())
+            // 不使用using，让窗体保持打开直到用户手动关闭
+            var progressForm = new AnalysisProgressForm();
+            
+            progressForm.Show();
+            System.Windows.Forms.Application.DoEvents();
+
+            progressForm.AddLog($"开始分析文件夹差异");
+            progressForm.AddLog($"源数据文件: {sourceRoot.Name}");
+            progressForm.AddLog($"目标数据文件: {targetRoot.Name}");
+            progressForm.AddLog("");
+
+            // 第一步：递归获取所有文件夹
+            progressForm.UpdateStatus("正在获取源数据文件文件夹列表...");
+            var sourceFolders = GetAllFoldersSimple(sourceRoot);
+            progressForm.UpdateStatus($"源数据文件: {sourceFolders.Count} 个文件夹");
+            progressForm.AddLog($"[源] 找到 {sourceFolders.Count} 个文件夹");
+
+            progressForm.UpdateStatus("正在获取目标数据文件文件夹列表...");
+            var targetFolders = GetAllFoldersSimple(targetRoot);
+            progressForm.UpdateStatus($"目标数据文件: {targetFolders.Count} 个文件夹");
+            progressForm.AddLog($"[目标] 找到 {targetFolders.Count} 个文件夹");
+
+            // 记录源文件夹详情到日志
+            progressForm.AddLog("");
+            progressForm.AddLog("=== 源文件夹列表 ===");
+            foreach (var folder in sourceFolders)
             {
-                progressForm.Show();
-                System.Windows.Forms.Application.DoEvents();
+                string simplePath = GetSimpleFolderPath(folder, sourceRoot);
+                progressForm.AddLog($"  {folder.Name} -> [{simplePath ?? "null"}] ({folder.Items.Count}封)");
+            }
 
-                // 第一步：获取所有文件夹
-                progressForm.UpdateStatus("正在获取源数据文件文件夹列表...");
-                var sourceFolders = GetAllFolders(sourceRoot);
-                progressForm.UpdateStatus($"找到 {sourceFolders.Count} 个文件夹，正在获取目标数据文件文件夹列表...");
+            // 第二步：构建目标文件夹字典
+            progressForm.AddLog("");
+            progressForm.AddLog("=== 目标文件夹列表 ===");
+            var targetFolderDict = new Dictionary<string, Outlook.MAPIFolder>(System.StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var folder in targetFolders)
+            {
+                string simplePath = GetSimpleFolderPath(folder, targetRoot);
+                progressForm.AddLog($"  {folder.Name} -> [{simplePath ?? "null"}] ({folder.Items.Count}封)");
                 
-                var targetFolders = GetAllFolders(targetRoot);
-                progressForm.UpdateStatus($"找到 {targetFolders.Count} 个文件夹，开始分析差异...");
-
-                // 第二步：分析差异
-                int processedCount = 0;
-                int totalFolders = sourceFolders.Count;
-
-                // 构建目标文件夹路径字典，使用相对路径作为键
-                var targetFolderDict = new Dictionary<string, Outlook.MAPIFolder>(System.StringComparer.OrdinalIgnoreCase);
-                foreach (var folder in targetFolders)
+                if (!string.IsNullOrEmpty(simplePath))
                 {
-                    string relativePath = GetRelativeFolderPath(folder, targetRoot);
-                    if (!string.IsNullOrEmpty(relativePath))
-                    {
-                        targetFolderDict[relativePath] = folder;
-                    }
+                    targetFolderDict[simplePath] = folder;
                 }
+            }
 
-                foreach (var sourceFolder in sourceFolders)
-                {
-                    processedCount++;
-                    
-                    // 获取相对于源根的路径
-                    string relativePath = GetRelativeFolderPath(sourceFolder, sourceRoot);
-                    if (string.IsNullOrEmpty(relativePath))
-                        continue;
+            progressForm.AddLog("");
+            progressForm.AddLog($"目标字典构建完成，包含 {targetFolderDict.Count} 个路径");
 
-                    // 每5个文件夹更新一次进度
-                    if (processedCount % 5 == 0)
+            // 第三步：对比源文件夹与目标
+            int processedCount = 0;
+            int totalFolders = sourceFolders.Count;
+            int matchedCount = 0;
+            int unmatchedCount = 0;
+
+            foreach (var sourceFolder in sourceFolders)
+            {
+                processedCount++;
+
+                // 获取简化路径
+                string simplePath = GetSimpleFolderPath(sourceFolder, sourceRoot);
+                if (string.IsNullOrEmpty(simplePath))
+                    continue;
+
+                // 每5个更新一次进度，或者最后一个
+                    if (processedCount % 5 == 0 || processedCount == totalFolders)
                     {
                         int percent = (int)((double)processedCount / totalFolders * 100);
                         progressForm.UpdateProgress(processedCount, totalFolders, percent);
-                        progressForm.UpdateStatus($"正在分析: {relativePath}");
+                        progressForm.UpdateStatus($"正在分析: {simplePath}");
                         System.Windows.Forms.Application.DoEvents();
                     }
 
-                    // 在目标文件夹中查找匹配的相对路径
-                    Outlook.MAPIFolder targetFolder = null;
-                    targetFolderDict.TryGetValue(relativePath, out targetFolder);
+                // 在目标中查找匹配
+                Outlook.MAPIFolder targetFolder = null;
+                bool foundInTarget = targetFolderDict.TryGetValue(simplePath, out targetFolder);
 
-                    // 使用更准确的方法获取邮件数量
-                    int sourceCount = GetMailItemCount(sourceFolder);
-                    int targetCount = targetFolder != null ? GetMailItemCount(targetFolder) : 0;
-                    
-                    // 调试信息
-                    System.Diagnostics.Debug.WriteLine($"[分析] 相对路径: {relativePath}, 源: {sourceCount}, 目标: {targetCount}");
-                    
-                    int diffCount = sourceCount - targetCount;
+                if (foundInTarget) matchedCount++;
+                else unmatchedCount++;
 
-                    if (diffCount > 0)
+                // 获取邮件数量
+                int sourceCount = GetMailItemCount(sourceFolder);
+                int targetCount = foundInTarget ? GetMailItemCount(targetFolder) : 0;
+
+                // 如果源比目标多，记录差异
+                if (sourceCount > targetCount)
+                {
+                    result.Add(new FolderDiffInfo
                     {
-                        result.Add(new FolderDiffInfo
-                        {
-                            FolderPath = relativePath,
-                            SourceFolder = sourceFolder,
-                            TargetFolder = targetFolder,
-                            SourceCount = sourceCount,
-                            TargetCount = targetCount,
-                            DiffCount = diffCount
-                        });
-                    }
+                        FolderPath = simplePath,
+                        SourceFolder = sourceFolder,
+                        TargetFolder = targetFolder,
+                        SourceCount = sourceCount,
+                        TargetCount = targetCount,
+                        DiffCount = sourceCount - targetCount
+                    });
                 }
+            }
 
-                progressForm.Complete($"分析完成！发现 {result.Count} 个有差异的文件夹");
+            // 输出分析结果统计到日志
+            progressForm.AddLog("");
+            progressForm.AddLog("=== 分析结果统计 ===");
+            progressForm.AddLog($"源文件夹总数: {sourceFolders.Count}");
+            progressForm.AddLog($"目标文件夹总数: {targetFolders.Count}");
+            progressForm.AddLog($"匹配成功: {matchedCount}");
+            progressForm.AddLog($"未匹配: {unmatchedCount}");
+            progressForm.AddLog($"有差异的文件夹: {result.Count}");
+
+            if (result.Count > 0)
+            {
+                progressForm.AddLog("");
+                progressForm.AddLog("=== 差异详情 ===");
+                foreach (var diff in result)
+                {
+                    progressForm.AddLog($"  {diff.FolderPath}: 源{diff.SourceCount} -> 目标{diff.TargetCount} (差{diff.DiffCount})");
+                }
+            }
+
+            // 完成分析，等待用户关闭窗体
+            progressForm.Complete($"发现 {result.Count} 个有差异的文件夹，请查看日志后关闭此窗口");
+            
+            // 使用ShowDialog方式等待用户手动关闭
+            System.Windows.Forms.Application.DoEvents();
+            progressForm.WaitForClose();
+
+            return result;
+        }
+
+        /// <summary>
+        /// 简单递归获取所有文件夹，无任何过滤
+        /// </summary>
+        private List<Outlook.MAPIFolder> GetAllFoldersSimple(Outlook.MAPIFolder root)
+        {
+            var result = new List<Outlook.MAPIFolder>();
+            if (root == null) return result;
+
+            result.Add(root);
+
+            // 安全地遍历子文件夹（不释放COM对象，让调用方统一管理）
+            try
+            {
+                foreach (Outlook.MAPIFolder folder in root.Folders)
+                {
+                    result.AddRange(GetAllFoldersSimple(folder));
+                }
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"获取子文件夹失败: {ex.Message}");
             }
 
             return result;
         }
 
+        /// <summary>
+        /// 获取文件夹的简化路径（用于跨PST文件匹配）
+        /// 规则：忽略根文件夹名称，只使用其子路径
+        /// 例如：PST1/收件箱/项目A 和 PST2/收件箱/项目A 都返回 "收件箱\项目A"
+        /// </summary>
+        private string GetSimpleFolderPath(Outlook.MAPIFolder folder, Outlook.MAPIFolder root)
+        {
+            if (folder == null) return null;
+            
+            // 使用EntryID比较来判断是否是同一个文件夹（COM对象引用比较不可靠）
+            try
+            {
+                if (folder.EntryID == root.EntryID)
+                    return "[根文件夹]";
+            }
+            catch { }
+
+            var parts = new List<string>();
+            Outlook.MAPIFolder current = folder;
+            string rootEntryID = null;
+            
+            try
+            {
+                rootEntryID = root.EntryID;
+            }
+            catch { }
+
+            // 向上遍历收集路径
+            int depth = 0;
+            while (current != null)
+            {
+                depth++;
+                if (depth > 100) // 防止无限循环
+                {
+                    System.Diagnostics.Debug.WriteLine($"[警告] 路径遍历超过100层，可能有问题: {folder.Name}");
+                    return null;
+                }
+                
+                // 检查是否到达根（使用EntryID比较）
+                try
+                {
+                    if (current.EntryID == rootEntryID)
+                        break; // 到达根，停止遍历
+                }
+                catch { }
+                
+                parts.Insert(0, current.Name);
+                
+                try
+                {
+                    current = current.Parent as Outlook.MAPIFolder;
+                }
+                catch (System.Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[错误] 获取父文件夹失败 {folder.Name}: {ex.Message}");
+                    break;
+                }
+            }
+
+            if (parts.Count == 0)
+                return "[根文件夹]";
+
+            return string.Join("\\", parts);
+        }
+
+        /// <summary>
+        /// 简单的差异分析（无进度条）
+        /// </summary>
         private List<FolderDiffInfo> AnalyzeFolderDifferences(Outlook.MAPIFolder sourceRoot, Outlook.MAPIFolder targetRoot)
         {
             var result = new List<FolderDiffInfo>();
-            var sourceFolders = GetAllFolders(sourceRoot);
-            var targetFolders = GetAllFolders(targetRoot);
+            var sourceFolders = GetAllFoldersSimple(sourceRoot);
+            var targetFolders = GetAllFoldersSimple(targetRoot);
 
-            // 构建目标文件夹路径字典，使用相对路径作为键
+            // 构建目标文件夹字典
             var targetFolderDict = new Dictionary<string, Outlook.MAPIFolder>(System.StringComparer.OrdinalIgnoreCase);
             foreach (var folder in targetFolders)
             {
-                string relativePath = GetRelativeFolderPath(folder, targetRoot);
-                if (!string.IsNullOrEmpty(relativePath))
+                string simplePath = GetSimpleFolderPath(folder, targetRoot);
+                if (!string.IsNullOrEmpty(simplePath))
                 {
-                    targetFolderDict[relativePath] = folder;
+                    targetFolderDict[simplePath] = folder;
                 }
             }
 
             foreach (var sourceFolder in sourceFolders)
             {
-                // 获取相对于源根的路径
-                string relativePath = GetRelativeFolderPath(sourceFolder, sourceRoot);
-                if (string.IsNullOrEmpty(relativePath))
+                string simplePath = GetSimpleFolderPath(sourceFolder, sourceRoot);
+                if (string.IsNullOrEmpty(simplePath))
                     continue;
 
-                // 在目标文件夹中查找匹配的相对路径
+                // 在目标中查找匹配
                 Outlook.MAPIFolder targetFolder = null;
-                targetFolderDict.TryGetValue(relativePath, out targetFolder);
+                targetFolderDict.TryGetValue(simplePath, out targetFolder);
 
-                // 使用更准确的方法获取邮件数量
                 int sourceCount = GetMailItemCount(sourceFolder);
                 int targetCount = targetFolder != null ? GetMailItemCount(targetFolder) : 0;
-                int diffCount = sourceCount - targetCount;
 
-                if (diffCount > 0)
+                if (sourceCount > targetCount)
                 {
                     result.Add(new FolderDiffInfo
                     {
-                        FolderPath = relativePath,
+                        FolderPath = simplePath,
                         SourceFolder = sourceFolder,
                         TargetFolder = targetFolder,
                         SourceCount = sourceCount,
                         TargetCount = targetCount,
-                        DiffCount = diffCount
+                        DiffCount = sourceCount - targetCount
                     });
                 }
             }
@@ -566,13 +675,13 @@ namespace jimsoutlooktools
         private List<Outlook.MAPIFolder> GetAllFolders(Outlook.MAPIFolder root)
         {
             var result = new List<Outlook.MAPIFolder>();
-            
+
             // 检查根文件夹是否被排除
             if (ShouldExcludeFolder(root))
                 return result;
-                
+
             result.Add(root);
-            
+
             foreach (Outlook.MAPIFolder folder in root.Folders)
             {
                 // 跳过被排除的文件夹
@@ -580,7 +689,7 @@ namespace jimsoutlooktools
                     continue;
                 result.AddRange(GetAllFolders(folder));
             }
-            
+
             return result;
         }
 
@@ -601,38 +710,6 @@ namespace jimsoutlooktools
                     break;
                 }
             }
-
-            return string.Join("\\", parts);
-        }
-
-        /// <summary>
-        /// 获取相对于根文件夹的路径
-        /// </summary>
-        private string GetRelativeFolderPath(Outlook.MAPIFolder folder, Outlook.MAPIFolder root)
-        {
-            if (folder == null) return null;
-            if (folder == root) return "";
-
-            var parts = new List<string>();
-            Outlook.MAPIFolder current = folder;
-
-            // 向上遍历直到到达根文件夹
-            while (current != null && current != root)
-            {
-                parts.Insert(0, current.Name);
-                try
-                {
-                    current = current.Parent as Outlook.MAPIFolder;
-                }
-                catch
-                {
-                    break;
-                }
-            }
-
-            // 如果没有到达根文件夹，说明不在同一棵树中
-            if (current != root)
-                return null;
 
             return string.Join("\\", parts);
         }
@@ -672,147 +749,205 @@ namespace jimsoutlooktools
         private void SyncFolders(List<FolderDiffInfo> selectedFolders, Outlook.MAPIFolder sourceRoot, Outlook.MAPIFolder targetRoot)
         {
             int totalEmails = selectedFolders.Sum(f => f.DiffCount);
-            int processedEmails = 0;
-            int successCount = 0;
-            int failedCount = 0;
-            var failedEmails = new List<string>();
 
             using (var syncProgress = new SyncProgressForm(AppVersion, totalEmails))
             {
                 syncProgress.Show();
+                syncProgress.AddLog($"开始同步 {selectedFolders.Count} 个文件夹，共 {totalEmails} 封邮件");
 
-                foreach (var folderDiff in selectedFolders)
+                // 在后台线程执行同步操作
+                var syncTask = System.Threading.Tasks.Task.Run(() =>
                 {
-                    if (syncProgress.IsCancelled)
-                        break;
+                    int processedEmails = 0;
+                    int successCount = 0;
+                    int failedCount = 0;
+                    var failedEmails = new List<string>();
 
-                    Outlook.MAPIFolder sourceFolder = folderDiff.SourceFolder;
-                    Outlook.MAPIFolder targetFolder = folderDiff.TargetFolder;
-
-                    // 如果目标文件夹不存在，创建它
-                    if (targetFolder == null)
+                    try
                     {
-                        targetFolder = CreateFolderStructure(sourceRoot, targetRoot, folderDiff.FolderPath);
-                        if (targetFolder == null)
+                        foreach (var folderDiff in selectedFolders)
                         {
-                            failedEmails.Add($"文件夹 {folderDiff.FolderPath} - 创建目标文件夹失败");
-                            continue;
-                        }
-                    }
-
-                    // 获取目标文件夹中已有的邮件EntryID，避免重复
-                    var existingEntryIds = new HashSet<string>();
-                    foreach (object item in targetFolder.Items)
-                    {
-                        if (item is Outlook.MailItem mail)
-                        {
-                            try
+                            if (syncProgress.IsCancelled)
                             {
-                                existingEntryIds.Add(mail.EntryID);
+                                syncProgress.AddLog("同步已取消");
+                                break;
                             }
-                            finally
+
+                            Outlook.MAPIFolder sourceFolder = folderDiff.SourceFolder;
+                            Outlook.MAPIFolder targetFolder = folderDiff.TargetFolder;
+
+                            syncProgress.AddLog($"开始处理文件夹: {folderDiff.FolderPath}");
+
+                            // 如果目标文件夹不存在，创建它
+                            if (targetFolder == null)
                             {
-                                System.Runtime.InteropServices.Marshal.ReleaseComObject(mail);
+                                syncProgress.AddLog($"  目标文件夹不存在，正在创建...");
+                                targetFolder = CreateFolderStructure(targetRoot, folderDiff.FolderPath);
+                                if (targetFolder == null)
+                                {
+                                    string errorMsg = $"文件夹 {folderDiff.FolderPath} - 创建目标文件夹失败";
+                                    failedEmails.Add(errorMsg);
+                                    syncProgress.AddLog($"  ✗ {errorMsg}");
+                                    continue;
+                                }
+                                syncProgress.AddLog($"  ✓ 目标文件夹创建成功");
                             }
-                        }
-                        else
-                        {
-                            System.Runtime.InteropServices.Marshal.ReleaseComObject(item);
-                        }
-                    }
 
-                    // 复制邮件
-                    Outlook.Items sourceItems = sourceFolder.Items;
-                    for (int i = 1; i <= sourceItems.Count; i++)
-                    {
-                        if (syncProgress.IsCancelled)
-                            break;
-
-                        object item = null;
-                        Outlook.MailItem sourceMail = null;
-
-                        try
-                        {
-                            item = sourceItems[i];
-                            sourceMail = item as Outlook.MailItem;
-
-                            if (sourceMail == null)
-                                continue;
-
-                            // 检查是否已存在
-                            if (existingEntryIds.Contains(sourceMail.EntryID))
-                                continue;
+                            // 获取目标文件夹中已有的邮件EntryID，避免重复
+                            syncProgress.AddLog($"  正在扫描目标文件夹已有邮件...");
+                            var existingEntryIds = new HashSet<string>();
+                            foreach (object item in targetFolder.Items)
+                            {
+                                if (item is Outlook.MailItem mail)
+                                {
+                                    try
+                                    {
+                                        existingEntryIds.Add(mail.EntryID);
+                                    }
+                                    finally
+                                    {
+                                        System.Runtime.InteropServices.Marshal.ReleaseComObject(mail);
+                                    }
+                                }
+                                else
+                                {
+                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(item);
+                                }
+                            }
+                            syncProgress.AddLog($"  已扫描 {existingEntryIds.Count} 封已有邮件");
 
                             // 复制邮件
-                            try
+                            int folderCopiedCount = 0;
+                            int folderSkippedCount = 0;
+                            int folderFailedCount = 0;
+                            Outlook.Items sourceItems = sourceFolder.Items;
+                            syncProgress.AddLog($"  开始复制邮件，源文件夹共 {sourceItems.Count} 封邮件");
+
+                            for (int i = 1; i <= sourceItems.Count; i++)
                             {
-                                // 使用 Copy() 方法复制邮件，然后移动到目标文件夹
-                                var copiedMail = sourceMail.Copy();
-                                copiedMail.Move(targetFolder);
-                                successCount++;
-                            }
-                            catch (System.Exception ex)
-                            {
-                                failedCount++;
-                                failedEmails.Add($"邮件: {sourceMail.Subject} | 文件夹: {folderDiff.FolderPath} | 错误: {ex.Message}");
-                                System.Diagnostics.Debug.WriteLine($"复制邮件失败: {sourceMail.Subject} - {ex.Message}");
+                                if (syncProgress.IsCancelled)
+                                    break;
+
+                                object item = null;
+                                Outlook.MailItem sourceMail = null;
+
+                                try
+                                {
+                                    item = sourceItems[i];
+                                    sourceMail = item as Outlook.MailItem;
+
+                                    if (sourceMail == null)
+                                        continue;
+
+                                    // 检查是否已存在
+                                    if (existingEntryIds.Contains(sourceMail.EntryID))
+                                    {
+                                        folderSkippedCount++;
+                                        continue;
+                                    }
+
+                                    // 复制邮件
+                                    try
+                                    {
+                                        // 使用 Copy() 方法复制邮件，然后移动到目标文件夹
+                                        var copiedMail = sourceMail.Copy();
+                                        copiedMail.Move(targetFolder);
+                                        successCount++;
+                                        folderCopiedCount++;
+
+                                        // 每20封邮件记录一次日志
+                                        if (folderCopiedCount % 20 == 0)
+                                        {
+                                            syncProgress.AddLog($"    已复制 {folderCopiedCount} 封邮件");
+                                        }
+                                    }
+                                    catch (System.Exception ex)
+                                    {
+                                        failedCount++;
+                                        folderFailedCount++;
+                                        string errorMsg = $"邮件: {sourceMail.Subject} | 错误: {ex.Message}";
+                                        failedEmails.Add(errorMsg);
+                                        syncProgress.AddLog($"    ✗ 复制失败: {sourceMail.Subject} - {ex.Message}");
+                                        System.Diagnostics.Debug.WriteLine($"复制邮件失败: {sourceMail.Subject} - {ex.Message}");
+                                    }
+
+                                    processedEmails++;
+
+                                    // 每处理5封邮件更新一次进度（提高响应性）
+                                    if (processedEmails % 5 == 0)
+                                    {
+                                        syncProgress.UpdateProgress(processedEmails, totalEmails, folderDiff.FolderPath);
+                                    }
+
+                                    // 每50封邮件垃圾回收
+                                    if (processedEmails % 50 == 0)
+                                    {
+                                        GC.Collect();
+                                        GC.WaitForPendingFinalizers();
+                                    }
+                                }
+                                finally
+                                {
+                                    if (sourceMail != null)
+                                        System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceMail);
+                                    if (item != null)
+                                        System.Runtime.InteropServices.Marshal.ReleaseComObject(item);
+                                }
                             }
 
-                            processedEmails++;
-
-                            // 每处理10封邮件更新一次进度
-                            if (processedEmails % 10 == 0)
-                            {
-                                syncProgress.UpdateProgress(processedEmails, totalEmails, folderDiff.FolderPath);
-                                System.Windows.Forms.Application.DoEvents();
-                            }
-
-                            // 每50封邮件垃圾回收
-                            if (processedEmails % 50 == 0)
-                            {
-                                GC.Collect();
-                                GC.WaitForPendingFinalizers();
-                            }
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceItems);
+                            syncProgress.AddLog($"  ✓ 文件夹处理完成: 复制 {folderCopiedCount} 封, 跳过 {folderSkippedCount} 封, 失败 {folderFailedCount} 封");
                         }
-                        finally
-                        {
-                            if (sourceMail != null)
-                                System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceMail);
-                            if (item != null)
-                                System.Runtime.InteropServices.Marshal.ReleaseComObject(item);
-                        }
+
+                        syncProgress.AddLog("");
+                        syncProgress.AddLog("=== 同步统计 ===");
+                        syncProgress.AddLog($"总计: 成功 {successCount} 封, 失败 {failedCount} 封");
+                        syncProgress.Complete();
+
+                        // 返回结果
+                        return new { SuccessCount = successCount, FailedCount = failedCount, FailedEmails = failedEmails };
                     }
+                    catch (System.Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"同步过程出错: {ex.Message}");
+                        syncProgress.AddLog($"✗ 同步过程出错: {ex.Message}");
+                        syncProgress.Complete();
+                        return new { SuccessCount = successCount, FailedCount = failedCount, FailedEmails = failedEmails };
+                    }
+                });
 
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceItems);
+                // 等待任务完成，同时保持UI响应
+                while (!syncTask.IsCompleted)
+                {
+                    System.Windows.Forms.Application.DoEvents();
+                    System.Threading.Thread.Sleep(50);
                 }
 
-                syncProgress.Complete();
-            }
+                // 获取结果
+                var result = syncTask.Result;
 
-            // 显示结果
-            ShowSyncResult(successCount, failedCount, failedEmails);
+                // 显示结果
+                ShowSyncResult(result.SuccessCount, result.FailedCount, result.FailedEmails);
+            }
         }
 
-        private Outlook.MAPIFolder CreateFolderStructure(Outlook.MAPIFolder sourceRoot, Outlook.MAPIFolder targetRoot, string folderPath)
+        private Outlook.MAPIFolder CreateFolderStructure(Outlook.MAPIFolder targetRoot, string relativeFolderPath)
         {
-            string rootPath = GetFolderPath(sourceRoot);
-            if (!folderPath.StartsWith(rootPath))
-                return null;
+            // 处理根文件夹的特殊标识符
+            if (string.IsNullOrEmpty(relativeFolderPath) || relativeFolderPath == "__ROOT__")
+                return targetRoot;
 
-            string relativePath = folderPath.Substring(rootPath.Length).TrimStart('\\');
-            string[] parts = relativePath.Split('\\');
+            string[] parts = relativeFolderPath.Split('\\');
 
             Outlook.MAPIFolder current = targetRoot;
-            string currentPath = GetFolderPath(targetRoot);
 
             foreach (string part in parts)
             {
-                currentPath = currentPath + "\\" + part;
                 Outlook.MAPIFolder nextFolder = null;
 
                 foreach (Outlook.MAPIFolder folder in current.Folders)
                 {
-                    if (folder.Name == part)
+                    if (folder.Name.Equals(part, System.StringComparison.OrdinalIgnoreCase))
                     {
                         nextFolder = folder;
                         break;
@@ -828,7 +963,7 @@ namespace jimsoutlooktools
                     }
                     catch (System.Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"创建文件夹失败: {currentPath} - {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"创建文件夹失败: {part} - {ex.Message}");
                         return null;
                     }
                 }
@@ -860,16 +995,24 @@ namespace jimsoutlooktools
 
             if (failedCount > 5)
             {
-                using (var resultForm = new SaveResultForm(AppVersion, message.ToString()))
+                using (var resultForm = new SaveResultForm(message.ToString()))
                 {
-                    resultForm.Text = $"jimsoutlooktools {AppVersion} - 同步结果详情";
+                    resultForm.Text = $"jimsoutlooktools - 同步结果详情";
                     resultForm.ShowDialog();
                 }
             }
             else
             {
-                MessageBox.Show(message.ToString(), $"jimsoutlooktools {AppVersion} - 同步结果", 
+                MessageBox.Show(message.ToString(), "jimsoutlooktools - 同步结果",
                     MessageBoxButtons.OK, failedCount > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            }
+        }
+
+        private void btnAbout_Click(object sender, RibbonControlEventArgs e)
+        {
+            using (var aboutForm = new AboutForm())
+            {
+                aboutForm.ShowDialog();
             }
         }
 

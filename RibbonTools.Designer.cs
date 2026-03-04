@@ -37,8 +37,10 @@ namespace jimsoutlooktools
             this.tabJimsOutlookTools = this.Factory.CreateRibbonTab();
             this.groupAttachments = this.Factory.CreateRibbonGroup();
             this.groupSync = this.Factory.CreateRibbonGroup();
+            this.groupAbout = this.Factory.CreateRibbonGroup();
             this.btnSaveAttachments = this.Factory.CreateRibbonButton();
             this.btnDownloadOnline = this.Factory.CreateRibbonButton();
+            this.btnAbout = this.Factory.CreateRibbonButton();
             this.tabJimsOutlookTools.SuspendLayout();
             this.groupAttachments.SuspendLayout();
             this.groupSync.SuspendLayout();
@@ -48,6 +50,7 @@ namespace jimsoutlooktools
             this.tabJimsOutlookTools.ControlId.ControlIdType = Microsoft.Office.Tools.Ribbon.RibbonControlIdType.Office;
             this.tabJimsOutlookTools.Groups.Add(this.groupAttachments);
             this.tabJimsOutlookTools.Groups.Add(this.groupSync);
+            this.tabJimsOutlookTools.Groups.Add(this.groupAbout);
             this.tabJimsOutlookTools.Label = "JTools";
             this.tabJimsOutlookTools.Name = "tabJimsOutlookTools";
             // 
@@ -62,6 +65,12 @@ namespace jimsoutlooktools
             this.groupSync.Items.Add(this.btnDownloadOnline);
             this.groupSync.Label = "数据同步";
             this.groupSync.Name = "groupSync";
+            //
+            // groupAbout
+            //
+            this.groupAbout.Items.Add(this.btnAbout);
+            this.groupAbout.Label = "关于";
+            this.groupAbout.Name = "groupAbout";
             // 
             // btnSaveAttachments
             // 
@@ -77,11 +86,21 @@ namespace jimsoutlooktools
             // 
             this.btnDownloadOnline.Label = "下载联机";
             this.btnDownloadOnline.Name = "btnDownloadOnline";
-            this.btnDownloadOnline.OfficeImageId = "Download";
+            this.btnDownloadOnline.OfficeImageId = "Export";
             this.btnDownloadOnline.ScreenTip = "从联机存档同步到本地PST";
             this.btnDownloadOnline.ShowImage = true;
             this.btnDownloadOnline.SuperTip = "选择联机存档数据文件和本地PST文件，分析差异后同步邮件";
             this.btnDownloadOnline.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnDownloadOnline_Click);
+            //
+            // btnAbout
+            //
+            this.btnAbout.Label = "关于";
+            this.btnAbout.Name = "btnAbout";
+            this.btnAbout.OfficeImageId = "Help";
+            this.btnAbout.ScreenTip = "关于 JTools";
+            this.btnAbout.ShowImage = true;
+            this.btnAbout.SuperTip = "查看版本信息、版权信息和帮助链接";
+            this.btnAbout.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnAbout_Click);
             // 
             // RibbonTools
             // 
@@ -95,6 +114,8 @@ namespace jimsoutlooktools
             this.groupAttachments.PerformLayout();
             this.groupSync.ResumeLayout(false);
             this.groupSync.PerformLayout();
+            this.groupAbout.ResumeLayout(false);
+            this.groupAbout.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -104,7 +125,9 @@ namespace jimsoutlooktools
         internal Microsoft.Office.Tools.Ribbon.RibbonTab tabJimsOutlookTools;
         internal Microsoft.Office.Tools.Ribbon.RibbonGroup groupAttachments;
         internal Microsoft.Office.Tools.Ribbon.RibbonGroup groupSync;
+        internal Microsoft.Office.Tools.Ribbon.RibbonGroup groupAbout;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnSaveAttachments;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnDownloadOnline;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton btnAbout;
     }
 }
