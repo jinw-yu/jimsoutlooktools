@@ -1509,7 +1509,7 @@ namespace jtools_outlook
             // 版本号
             var lblVersion = new Label
             {
-                Text = "版本 v1.0.5",
+                Text = "版本 v1.0.6",
                 Dock = DockStyle.Fill,
                 TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
                 Font = new System.Drawing.Font("Microsoft Sans Serif", 11),
