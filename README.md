@@ -113,7 +113,7 @@ jtools-outlook/
 
 ## 作者
 
-**Jim** - [jinw.yu@qq.com](mailto:jinw.yu@qq.com)
+**Jim** - [jasonw.yu@foxmail.com](mailto:jasonw.yu@foxmail.com)
 
 ## 致谢
 
