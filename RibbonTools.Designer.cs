@@ -106,7 +106,7 @@ namespace jtools_outlook
             //
             this.btnBlockDomain.Label = "阻止域";
             this.btnBlockDomain.Name = "btnBlockDomain";
-            this.btnBlockDomain.OfficeImageId = "Junk";
+            this.btnBlockDomain.OfficeImageId = "DeclineInvitation";
             this.btnBlockDomain.ScreenTip = "阻止发件人域";
             this.btnBlockDomain.ShowImage = true;
             this.btnBlockDomain.SuperTip = "将当前选中邮件的发件人域添加到阻止发件人列表";
