@@ -1,6 +1,6 @@
 # JTools
 
-[![版本](https://img.shields.io/badge/版本-v1.0.8-blue)](https://gitee.com/jinwyu/jtools-outlook)
+[![版本](https://img.shields.io/badge/版本-v1.0.8-blue)](https://gitee.com/jasonw-yu/jtools-outlook)
 [![协议](https://img.shields.io/badge/协议-MIT-green)](LICENSE)
 
 > ⚠️ **Vibe Coding 警告**
@@ -57,7 +57,7 @@
 ### 方法二：手动安装（开发者）
 1. 克隆仓库
    ```bash
-   git clone https://gitee.com/jinwyu/jtools-outlook.git
+   git clone https://gitee.com/jasonw-yu/jtools-outlook.git
    ```
 2. 使用 Visual Studio 打开 `JTools-outlook.slnx`
 3. 编译并发布项目
