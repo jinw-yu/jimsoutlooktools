@@ -1110,80 +1110,53 @@ namespace jtools_outlook
         {
             try
             {
-                // 对于 Office 365 Outlook，使用注册表方法添加阻止发件人
-                // 路径：HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\Outlook\Options\Mail\Junk Mail Block Senders
+                // 使用 Outlook 的 MarkAsJunk 方法来阻止发件人
+                // 这与手动在垃圾邮件选项中添加阻止发件人相同
 
-                string registryPath = @"Software\Microsoft\Office\16.0\Outlook\Options\Mail";
-                string valueName = "Junk Mail Block Senders";
+                var explorer = Globals.ThisAddIn.Application.ActiveExplorer();
+                if (explorer == null || explorer.Selection == null || explorer.Selection.Count == 0)
+                {
+                    throw new Exception("没有选中的邮件");
+                }
 
-                // 尝试使用注册表方法
+                var selectedItem = explorer.Selection[1];
+                if (!(selectedItem is Outlook.MailItem mailItem))
+                {
+                    throw new Exception("选中的项目不是邮件");
+                }
+
+                // 使用 MarkAsJunk 方法
+                // 参数: MarkAsJunk(IsJunk, MoveItem, Action)
+                // IsJunk: true 表示标记为垃圾邮件
+                // MoveItem: true 表示移动到垃圾邮件文件夹
+                // Action: 0 = 无操作, 1 = 添加到阻止发件人列表
+
                 try
                 {
-                    var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(registryPath, true);
-                    if (key == null)
-                    {
-                        key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(registryPath);
-                    }
+                    // 调用 MarkAsJunk 方法
+                    mailItem.MarkAsJunk(true, true, 1);
 
-                    // 获取现有的阻止发件人列表
-                    string existingValue = key.GetValue(valueName) as string ?? "";
-
-                    // 添加新域（格式：@domain.com）
-                    string newEntry = $"@{domain}";
-                    if (!existingValue.Contains(newEntry))
-                    {
-                        string newValue = string.IsNullOrEmpty(existingValue)
-                            ? newEntry
-                            : $"{existingValue};{newEntry}";
-
-                        key.SetValue(valueName, newValue);
-                        key.Close();
-
-                        // 通知 Outlook 刷新垃圾邮件设置
-                        // 这需要重启 Outlook 才能生效
-                        MessageBox.Show(
-                            $"已将域 '{domain}' 添加到阻止发件人列表。\n\n请重启 Outlook 使设置生效。",
-                            "JTools-outlook - 操作成功",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-                        return;
-                    }
-                    else
-                    {
-                        MessageBox.Show(
-                            $"域 '{domain}' 已在阻止发件人列表中。",
-                            "JTools-outlook - 提示",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-                        return;
-                    }
+                    MessageBox.Show(
+                        $"已将发件人域 '{domain}' 添加到阻止发件人列表。\n\n来自该域的邮件将被自动移动到垃圾邮件文件夹。",
+                        "JTools-outlook - 操作成功",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
                 }
-                catch (Exception regEx)
+                catch (Exception markEx)
                 {
-                    // 如果注册表方法失败，尝试使用 Outlook 对象模型
-                    // 但这次使用更简单的方法：标记为垃圾邮件
-                    var explorer = Globals.ThisAddIn.Application.ActiveExplorer();
-                    if (explorer != null && explorer.Selection != null && explorer.Selection.Count > 0)
-                    {
-                        var selectedItem = explorer.Selection[1];
-                        if (selectedItem is Outlook.MailItem mailItem)
-                        {
-                            // 将当前邮件移动到垃圾邮件文件夹
-                            var junkFolder = Globals.ThisAddIn.Application.Session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderJunk);
-                            mailItem.Move(junkFolder);
+                    // 如果 MarkAsJunk 方法失败，使用备用方法
+                    // 直接将邮件移动到垃圾邮件文件夹，并提示用户手动添加
 
-                            MessageBox.Show(
-                                $"已将当前邮件移动到垃圾邮件文件夹。\n\n提示：请手动在 Outlook 中将发件人 '{domain}' 添加到阻止发件人列表。\n\n路径：开始 → 删除 → 垃圾邮件 → 垃圾邮件选项 → 阻止发件人",
-                                "JTools-outlook - 提示",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Information);
+                    var junkFolder = Globals.ThisAddIn.Application.Session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderJunk);
+                    mailItem.Move(junkFolder);
 
-                            System.Runtime.InteropServices.Marshal.ReleaseComObject(junkFolder);
-                            return;
-                        }
-                    }
+                    MessageBox.Show(
+                        $"已将当前邮件移动到垃圾邮件文件夹。\n\n由于 Outlook 限制，无法自动添加域到阻止发件人列表。\n\n请手动添加：\n1. 点击"开始"选项卡\n2. 点击"删除"组中的"垃圾邮件"\n3. 选择"垃圾邮件选项"\n4. 在"阻止发件人"选项卡中点击"添加"\n5. 输入: *@{domain}\n6. 点击"确定"",
+                        "JTools-outlook - 需要手动操作",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
 
-                    throw new Exception($"注册表方法失败: {regEx.Message}");
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(junkFolder);
                 }
             }
             catch (Exception ex)
