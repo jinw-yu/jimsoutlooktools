@@ -1111,7 +1111,7 @@ namespace jtools_outlook
             try
             {
                 // 使用 Outlook 规则来阻止该域
-                // 创建一个简单的规则：删除来自该域的邮件
+                // 创建一个规则：将来自该域的邮件移动到垃圾邮件文件夹
 
                 var rules = Globals.ThisAddIn.Application.Session.DefaultStore.GetRules();
                 bool ruleExists = false;
@@ -1122,8 +1122,10 @@ namespace jtools_outlook
                     if (rule.Name == $"Block Domain: {domain}")
                     {
                         ruleExists = true;
+                        System.Runtime.InteropServices.Marshal.ReleaseComObject(rule);
                         break;
                     }
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(rule);
                 }
 
                 if (!ruleExists)
@@ -1135,22 +1137,20 @@ namespace jtools_outlook
                     newRule.Conditions.SenderAddress.Enabled = true;
                     newRule.Conditions.SenderAddress.Address = new string[] { $"@{domain}" };
 
-                    // 设置动作：永久删除
-                    newRule.Actions.Delete.Enabled = true;
-                    newRule.Actions.Delete.PermanentlyDelete = true;
+                    // 设置动作：移动到垃圾邮件文件夹
+                    var junkFolder = Globals.ThisAddIn.Application.Session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderJunk);
+                    newRule.Actions.MoveToFolder.Enabled = true;
+                    newRule.Actions.MoveToFolder.Folder = junkFolder;
 
                     // 保存规则
                     rules.Save();
 
                     // 释放 COM 对象
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(junkFolder);
                     System.Runtime.InteropServices.Marshal.ReleaseComObject(newRule);
                 }
 
                 // 释放 COM 对象
-                foreach (Outlook.Rule rule in rules)
-                {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(rule);
-                }
                 System.Runtime.InteropServices.Marshal.ReleaseComObject(rules);
             }
             catch (Exception ex)
