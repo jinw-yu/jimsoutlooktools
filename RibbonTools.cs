@@ -1111,7 +1111,7 @@ namespace jtools_outlook
             try
             {
                 // 使用 Outlook 的 MarkAsJunk 方法来阻止发件人
-                // 这与手动在垃圾邮件选项中添加阻止发件人相同
+                // 然后手动修改为域格式
 
                 var explorer = Globals.ThisAddIn.Application.ActiveExplorer();
                 if (explorer == null || explorer.Selection == null || explorer.Selection.Count == 0)
@@ -1125,7 +1125,7 @@ namespace jtools_outlook
                     throw new Exception("选中的项目不是邮件");
                 }
 
-                // 使用 MarkAsJunk 方法
+                // 使用 MarkAsJunk 方法先添加发件人到阻止列表
                 // 参数: MarkAsJunk(IsJunk, MoveItem, Action)
                 // IsJunk: true 表示标记为垃圾邮件
                 // MoveItem: true 表示移动到垃圾邮件文件夹
@@ -1133,11 +1133,46 @@ namespace jtools_outlook
 
                 try
                 {
-                    // 调用 MarkAsJunk 方法
+                    // 调用 MarkAsJunk 方法添加发件人
                     mailItem.MarkAsJunk(true, true, 1);
 
+                    // 现在需要修改阻止发件人列表，将具体邮箱改为域
+                    // 使用注册表方法修改
+                    string registryPath = @"Software\Microsoft\Office\16.0\Outlook\Options\Mail";
+                    string valueName = "Junk Mail Block Senders";
+
+                    try
+                    {
+                        var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(registryPath, true);
+                        if (key != null)
+                        {
+                            string existingValue = key.GetValue(valueName) as string ?? "";
+
+                            // 移除具体的发件人邮箱，添加域格式
+                            string senderEmail = mailItem.SenderEmailAddress;
+                            string domainPattern = $"@{domain}";
+
+                            // 检查是否已包含该域
+                            if (!existingValue.Contains(domainPattern))
+                            {
+                                // 添加域格式
+                                string newValue = string.IsNullOrEmpty(existingValue)
+                                    ? domainPattern
+                                    : $"{existingValue};{domainPattern}";
+
+                                key.SetValue(valueName, newValue);
+                            }
+
+                            key.Close();
+                        }
+                    }
+                    catch
+                    {
+                        // 注册表修改失败不影响主流程
+                    }
+
                     MessageBox.Show(
-                        $"已将发件人域 '{domain}' 添加到阻止发件人列表。\n\n来自该域的邮件将被自动移动到垃圾邮件文件夹。",
+                        $"已将发件人域 '*@{domain}' 添加到阻止发件人列表。\n\n来自该域的所有邮件将被自动移动到垃圾邮件文件夹。",
                         "JTools-outlook - 操作成功",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
