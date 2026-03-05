@@ -1119,31 +1119,30 @@ namespace jtools_outlook
                 string domainEntry = $"@{domain}";
                 string fullRegistryPath = $"HKEY_CURRENT_USER\\{registryPath}";
 
-                // 显示详细确认对话框
-                string confirmMessage = $"即将执行以下操作：\n\n" +
-                    $"【操作内容】\n" +
-                    $"将域 '*@{domain}' 添加到 Outlook 阻止发件人列表\n\n" +
-                    $"【注册表修改】\n" +
-                    $"位置: {fullRegistryPath}\n" +
-                    $"值名: {valueName}\n" +
-                    $"类型: REG_MULTI_SZ (多字符串值)\n" +
-                    $"添加内容: {domainEntry}\n\n" +
-                    $"【效果】\n" +
-                    $"• 来自该域的所有邮件将被自动移动到垃圾邮件文件夹\n" +
-                    $"• 当前邮件也会被移动到垃圾邮件文件夹\n" +
-                    $"• 可能需要重启 Outlook 使设置生效\n\n" +
-                    $"是否继续？";
+                // 构建日志信息
+                var logBuilder = new System.Text.StringBuilder();
+                logBuilder.AppendLine("【操作内容】");
+                logBuilder.AppendLine($"将域 '*@{domain}' 添加到 Outlook 阻止发件人列表");
+                logBuilder.AppendLine();
+                logBuilder.AppendLine("【注册表修改】");
+                logBuilder.AppendLine($"位置: {fullRegistryPath}");
+                logBuilder.AppendLine($"值名: {valueName}");
+                logBuilder.AppendLine($"类型: REG_MULTI_SZ (多字符串值)");
+                logBuilder.AppendLine($"添加内容: {domainEntry}");
+                logBuilder.AppendLine();
+                logBuilder.AppendLine("【效果】");
+                logBuilder.AppendLine("• 来自该域的所有邮件将被自动移动到垃圾邮件文件夹");
+                logBuilder.AppendLine("• 当前邮件也会被移动到垃圾邮件文件夹");
+                logBuilder.AppendLine("• 可能需要重启 Outlook 使设置生效");
 
-                var confirmResult = MessageBox.Show(
-                    confirmMessage,
-                    "JTools-outlook - 确认添加阻止域",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question,
-                    MessageBoxDefaultButton.Button2);
-
-                if (confirmResult != DialogResult.Yes)
+                // 显示确认对话框
+                using (var confirmForm = new BlockDomainConfirmForm(domain, logBuilder.ToString()))
                 {
-                    return;
+                    if (confirmForm.ShowDialog() != DialogResult.OK)
+                    {
+                        // 用户取消，不执行任何操作
+                        return;
+                    }
                 }
 
                 try
@@ -1193,27 +1192,47 @@ namespace jtools_outlook
                             }
                         }
 
-                        MessageBox.Show(
-                            $"操作成功！\n\n" +
-                            $"已将域 '*@{domain}' 添加到阻止发件人列表。\n\n" +
-                            $"注册表位置: {fullRegistryPath}\n" +
-                            $"值名: {valueName}\n\n" +
-                            $"来自该域的所有邮件将被自动移动到垃圾邮件文件夹。\n\n" +
-                            $"注意：可能需要重启 Outlook 使设置生效。",
-                            "JTools-outlook - 操作成功",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
+                        // 构建成功日志
+                        var successLog = new System.Text.StringBuilder();
+                        successLog.AppendLine("【操作成功】");
+                        successLog.AppendLine($"已将域 '*@{domain}' 添加到阻止发件人列表");
+                        successLog.AppendLine();
+                        successLog.AppendLine("【注册表修改】");
+                        successLog.AppendLine($"位置: {fullRegistryPath}");
+                        successLog.AppendLine($"值名: {valueName}");
+                        successLog.AppendLine($"类型: REG_MULTI_SZ (多字符串值)");
+                        successLog.AppendLine($"添加内容: {domainEntry}");
+                        successLog.AppendLine();
+                        successLog.AppendLine("【效果】");
+                        successLog.AppendLine("来自该域的所有邮件将被自动移动到垃圾邮件文件夹");
+                        successLog.AppendLine();
+                        successLog.AppendLine("【提示】");
+                        successLog.AppendLine("可能需要重启 Outlook 使设置生效");
+
+                        // 显示成功对话框
+                        using (var resultForm = new BlockDomainResultForm(successLog.ToString()))
+                        {
+                            resultForm.ShowDialog();
+                        }
                     }
                     else
                     {
                         key.Close();
-                        MessageBox.Show(
-                            $"域 '*@{domain}' 已在阻止发件人列表中。\n\n" +
-                            $"注册表位置: {fullRegistryPath}\n" +
-                            $"值名: {valueName}",
-                            "JTools-outlook - 提示",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
+
+                        // 构建已存在日志
+                        var existLog = new System.Text.StringBuilder();
+                        existLog.AppendLine("【提示】");
+                        existLog.AppendLine($"域 '*@{domain}' 已在阻止发件人列表中");
+                        existLog.AppendLine();
+                        existLog.AppendLine("【注册表位置】");
+                        existLog.AppendLine($"位置: {fullRegistryPath}");
+                        existLog.AppendLine($"值名: {valueName}");
+
+                        // 显示已存在对话框
+                        using (var resultForm = new BlockDomainResultForm(existLog.ToString()))
+                        {
+                            resultForm.ShowDialog();
+                        }
                     }
                 }
                 catch (Exception)
@@ -1228,11 +1247,27 @@ namespace jtools_outlook
                             var junkFolder = Globals.ThisAddIn.Application.Session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderJunk);
                             mailItem.Move(junkFolder);
 
-                            MessageBox.Show(
-                                $"已将当前邮件移动到垃圾邮件文件夹。\n\n由于权限限制，无法自动添加域到阻止发件人列表。\n\n请手动添加：\n1. 点击\"开始\"选项卡\n2. 点击\"删除\"组中的\"垃圾邮件\"\n3. 选择\"垃圾邮件选项\"\n4. 在\"阻止发件人\"选项卡中点击\"添加\"\n5. 输入: *@{domain}\n6. 点击\"确定\"",
-                                "JTools-outlook - 需要手动操作",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Information);
+                            // 构建手动操作日志
+                            var manualLog = new System.Text.StringBuilder();
+                            manualLog.AppendLine("【操作失败】");
+                            manualLog.AppendLine("由于权限限制，无法自动添加域到阻止发件人列表");
+                            manualLog.AppendLine();
+                            manualLog.AppendLine("【已执行操作】");
+                            manualLog.AppendLine("已将当前邮件移动到垃圾邮件文件夹");
+                            manualLog.AppendLine();
+                            manualLog.AppendLine("【手动添加步骤】");
+                            manualLog.AppendLine("1. 点击\"开始\"选项卡");
+                            manualLog.AppendLine("2. 点击\"删除\"组中的\"垃圾邮件\"");
+                            manualLog.AppendLine("3. 选择\"垃圾邮件选项\"");
+                            manualLog.AppendLine("4. 在\"阻止发件人\"选项卡中点击\"添加\"");
+                            manualLog.AppendLine($"5. 输入: *@{domain}");
+                            manualLog.AppendLine("6. 点击\"确定\"");
+
+                            // 显示手动操作对话框
+                            using (var resultForm = new BlockDomainResultForm(manualLog.ToString()))
+                            {
+                                resultForm.ShowDialog();
+                            }
 
                             System.Runtime.InteropServices.Marshal.ReleaseComObject(junkFolder);
                         }

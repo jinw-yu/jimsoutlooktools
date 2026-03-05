@@ -3032,4 +3032,166 @@ namespace jtools_outlook
     }
 
     #endregion
+
+    #region 阻止域对话框
+
+    // 确认对话框
+    public class BlockDomainConfirmForm : Form
+    {
+        public BlockDomainConfirmForm(string domain, string logContent)
+        {
+            this.Text = $"JTools-outlook - 确认阻止域 *@{domain}";
+            this.Width = 600;
+            this.Height = 450;
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+
+            // 标题标签
+            var lblTitle = new Label
+            {
+                Text = $"确认阻止域: *@{domain}",
+                Dock = DockStyle.Top,
+                Height = 40,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Font = new System.Drawing.Font("Microsoft Sans Serif", 14, System.Drawing.FontStyle.Bold),
+                ForeColor = System.Drawing.Color.SteelBlue
+            };
+
+            // 日志文本框
+            var txtLog = new TextBox
+            {
+                Text = logContent,
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ScrollBars = ScrollBars.Vertical,
+                ReadOnly = true,
+                Font = new System.Drawing.Font("Consolas", 10),
+                BackColor = System.Drawing.Color.White
+            };
+
+            // 按钮面板
+            var panelButtons = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 60
+            };
+
+            var btnOK = new Button
+            {
+                Text = "确定执行",
+                DialogResult = DialogResult.OK,
+                Width = 120,
+                Height = 35,
+                Left = 150,
+                Top = 12
+            };
+
+            var btnCancel = new Button
+            {
+                Text = "取消",
+                DialogResult = DialogResult.Cancel,
+                Width = 120,
+                Height = 35,
+                Left = 320,
+                Top = 12
+            };
+
+            panelButtons.Controls.Add(btnOK);
+            panelButtons.Controls.Add(btnCancel);
+
+            this.Controls.Add(txtLog);
+            this.Controls.Add(lblTitle);
+            this.Controls.Add(panelButtons);
+
+            this.AcceptButton = btnCancel; // 默认取消按钮
+            this.CancelButton = btnCancel;
+        }
+    }
+
+    // 结果对话框
+    public class BlockDomainResultForm : Form
+    {
+        public BlockDomainResultForm(string logContent)
+        {
+            this.Text = "JTools-outlook - 操作结果";
+            this.Width = 600;
+            this.Height = 450;
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+
+            // 标题标签
+            var lblTitle = new Label
+            {
+                Text = "操作日志",
+                Dock = DockStyle.Top,
+                Height = 40,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Font = new System.Drawing.Font("Microsoft Sans Serif", 14, System.Drawing.FontStyle.Bold),
+                ForeColor = System.Drawing.Color.SteelBlue
+            };
+
+            // 日志文本框
+            var txtLog = new TextBox
+            {
+                Text = logContent,
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ScrollBars = ScrollBars.Vertical,
+                ReadOnly = true,
+                Font = new System.Drawing.Font("Consolas", 10),
+                BackColor = System.Drawing.Color.White
+            };
+
+            // 按钮面板
+            var panelButtons = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 60
+            };
+
+            var btnCopy = new Button
+            {
+                Text = "复制日志",
+                Width = 120,
+                Height = 35,
+                Left = 150,
+                Top = 12
+            };
+            btnCopy.Click += (s, e) =>
+            {
+                try
+                {
+                    Clipboard.SetText(logContent);
+                    MessageBox.Show("日志已复制到剪贴板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch { }
+            };
+
+            var btnClose = new Button
+            {
+                Text = "关闭",
+                DialogResult = DialogResult.OK,
+                Width = 120,
+                Height = 35,
+                Left = 320,
+                Top = 12
+            };
+
+            panelButtons.Controls.Add(btnCopy);
+            panelButtons.Controls.Add(btnClose);
+
+            this.Controls.Add(txtLog);
+            this.Controls.Add(lblTitle);
+            this.Controls.Add(panelButtons);
+
+            this.AcceptButton = btnClose;
+            this.CancelButton = btnClose;
+        }
+    }
+
+    #endregion
 }
