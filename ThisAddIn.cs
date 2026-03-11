@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -12,7 +13,7 @@ namespace jtools_outlook
 {
     public partial class ThisAddIn
     {
-        private const string AppVersion = "v1.0.6";
+        private const string AppVersion = "v1.1.0";
 
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
@@ -498,302 +499,6 @@ namespace jtools_outlook
     #region 联机存档同步窗体
 
     /// <summary>
-    /// 数据文件选择窗体
-    /// </summary>
-    public class DataFileSelectForm : Form
-    {
-        private Outlook.Application _application;
-        private ComboBox cmbSourceStore;
-        private ComboBox cmbTargetStore;
-        private Button btnOK;
-        private Button btnCancel;
-        private Label lblLoading;
-        private ProgressBar progressLoading;
-
-        public Outlook.MAPIFolder SourceRootFolder { get; private set; }
-        public Outlook.MAPIFolder TargetRootFolder { get; private set; }
-
-        public DataFileSelectForm(Outlook.Application application)
-        {
-            _application = application;
-            InitializeComponent();
-            // 异步加载数据文件
-            LoadStoresAsync();
-        }
-
-        private void InitializeComponent()
-        {
-            this.Text = "选择数据文件";
-            this.Width = 667;  // 扩大1/3: 500 * 4/3 ≈ 667
-            this.Height = 427;  // 扩大1/3: 320 * 4/3 ≈ 427
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-
-            var tableLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 6,
-                Padding = new Padding(20)  // 增加内边距
-            };
-
-            // 标题
-            var titleLabel = new Label
-            {
-                Text = "选择源数据文件和目标数据文件",
-                Dock = DockStyle.Fill,
-                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 12, System.Drawing.FontStyle.Bold),
-                ForeColor = System.Drawing.Color.SteelBlue,
-                Height = 35
-            };
-
-            // 加载状态面板
-            var loadingPanel = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Height = 50
-            };
-
-            lblLoading = new Label
-            {
-                Text = "正在加载数据文件列表，请稍候...",
-                Left = 0,
-                Top = 0,
-                Width = 600,
-                Height = 25,
-                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-                ForeColor = System.Drawing.Color.SteelBlue
-            };
-
-            progressLoading = new ProgressBar
-            {
-                Left = 0,
-                Top = 28,
-                Width = 600,
-                Height = 18,
-                Style = ProgressBarStyle.Marquee,
-                MarqueeAnimationSpeed = 30
-            };
-
-            loadingPanel.Controls.Add(lblLoading);
-            loadingPanel.Controls.Add(progressLoading);
-
-            // 源数据文件（联机存档）
-            var sourceLabel = new Label
-            {
-                Text = "源数据文件（联机存档）:",
-                Dock = DockStyle.Fill,
-                TextAlign = System.Drawing.ContentAlignment.BottomLeft,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9, System.Drawing.FontStyle.Bold),
-                Height = 30
-            };
-
-            cmbSourceStore = new ComboBox
-            {
-                Dock = DockStyle.Fill,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Height = 28,
-                Enabled = false
-            };
-
-            // 目标数据文件（本地PST）
-            var targetLabel = new Label
-            {
-                Text = "目标数据文件（本地PST）:",
-                Dock = DockStyle.Fill,
-                TextAlign = System.Drawing.ContentAlignment.BottomLeft,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9, System.Drawing.FontStyle.Bold),
-                Height = 30
-            };
-
-            cmbTargetStore = new ComboBox
-            {
-                Dock = DockStyle.Fill,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Height = 28,
-                Enabled = false
-            };
-
-            // 按钮面板
-            var buttonPanel = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 50
-            };
-
-            btnOK = new Button
-            {
-                Text = "下一步",
-                Width = 90,
-                Height = 32,
-                Left = 380,
-                Top = 8,
-                Enabled = false
-            };
-            btnOK.Click += BtnOK_Click;
-
-            btnCancel = new Button
-            {
-                Text = "取消",
-                Width = 90,
-                Height = 32,
-                Left = 490,
-                Top = 8,
-                DialogResult = DialogResult.Cancel
-            };
-
-            buttonPanel.Controls.Add(btnOK);
-            buttonPanel.Controls.Add(btnCancel);
-
-            // 说明标签
-            var hintLabel = new Label
-            {
-                Text = "提示：源数据文件是Office 365联机存档，目标数据文件是本地PST文件",
-                Dock = DockStyle.Fill,
-                ForeColor = System.Drawing.Color.Gray,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 8),
-                AutoSize = true,
-                MinimumSize = new System.Drawing.Size(0, 30)
-            };
-
-            tableLayout.Controls.Add(titleLabel, 0, 0);
-            tableLayout.Controls.Add(loadingPanel, 0, 1);
-            tableLayout.Controls.Add(sourceLabel, 0, 2);
-            tableLayout.Controls.Add(cmbSourceStore, 0, 3);
-            tableLayout.Controls.Add(targetLabel, 0, 4);
-            tableLayout.Controls.Add(cmbTargetStore, 0, 5);
-            tableLayout.Controls.Add(hintLabel, 0, 6);
-
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-
-            this.Controls.Add(tableLayout);
-            this.Controls.Add(buttonPanel);
-
-            this.AcceptButton = btnOK;
-            this.CancelButton = btnCancel;
-        }
-
-        private async void LoadStoresAsync()
-        {
-            lblLoading.Text = "正在连接 Outlook 并加载数据文件列表，请稍候...";
-            progressLoading.Visible = true;
-            
-            try
-            {
-                var storeList = await System.Threading.Tasks.Task.Run(() =>
-                {
-                    var stores = _application.Session.Stores;
-                    var list = new List<StoreInfo>();
-
-                    foreach (Outlook.Store store in stores)
-                    {
-                        try
-                        {
-                            string displayName = store.DisplayName;
-                            bool isArchive = displayName.ToLower().Contains("archive") || 
-                                             displayName.ToLower().Contains("联机") ||
-                                             displayName.ToLower().Contains("online");
-                            
-                            list.Add(new StoreInfo
-                            {
-                                Store = store,
-                                DisplayName = $"{(isArchive ? "[联机] " : "[本地] ")}{displayName}",
-                                IsArchive = isArchive
-                            });
-                        }
-                        catch { }
-                    }
-                    return list;
-                });
-
-                var sourceList = storeList.Where(s => s.IsArchive).ToList();
-                var targetList = storeList.Where(s => !s.IsArchive).ToList();
-
-                cmbSourceStore.DataSource = sourceList;
-                cmbSourceStore.DisplayMember = "DisplayName";
-                cmbSourceStore.ValueMember = "Store";
-                cmbSourceStore.Enabled = sourceList.Count > 0;
-
-                cmbTargetStore.DataSource = targetList;
-                cmbTargetStore.DisplayMember = "DisplayName";
-                cmbTargetStore.ValueMember = "Store";
-                cmbTargetStore.Enabled = targetList.Count > 0;
-
-                btnOK.Enabled = sourceList.Count > 0 && targetList.Count > 0;
-
-                if (sourceList.Count == 0)
-                {
-                    lblLoading.Text = "未检测到联机存档数据文件";
-                    lblLoading.ForeColor = System.Drawing.Color.Red;
-                }
-                else if (targetList.Count == 0)
-                {
-                    lblLoading.Text = "未检测到本地 PST 数据文件";
-                    lblLoading.ForeColor = System.Drawing.Color.Red;
-                }
-                else
-                {
-                    lblLoading.Text = $"已加载 {storeList.Count} 个数据文件";
-                    lblLoading.ForeColor = System.Drawing.Color.Green;
-                    progressLoading.Visible = false;
-                }
-            }
-            catch (System.Exception ex)
-            {
-                lblLoading.Text = $"加载失败: {ex.Message}";
-                lblLoading.ForeColor = System.Drawing.Color.Red;
-            }
-        }
-
-        private void BtnOK_Click(object sender, EventArgs e)
-        {
-            if (cmbSourceStore.SelectedItem == null || cmbTargetStore.SelectedItem == null)
-            {
-                MessageBox.Show("请选择源数据文件和目标数据文件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            var sourceStoreInfo = (StoreInfo)cmbSourceStore.SelectedItem;
-            var targetStoreInfo = (StoreInfo)cmbTargetStore.SelectedItem;
-
-            try
-            {
-                SourceRootFolder = sourceStoreInfo.Store.GetRootFolder();
-                TargetRootFolder = targetStoreInfo.Store.GetRootFolder();
-
-                if (SourceRootFolder == null || TargetRootFolder == null)
-                {
-                    MessageBox.Show("无法获取所选数据文件的根文件夹。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                // 检查是否是同一个数据文件
-                if (sourceStoreInfo.Store.StoreID == targetStoreInfo.Store.StoreID)
-                {
-                    MessageBox.Show("源数据文件和目标数据文件不能相同。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-
-                this.DialogResult = DialogResult.OK;
-                this.Close();
-            }
-            catch (System.Exception ex)
-            {
-                MessageBox.Show($"获取数据文件失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-    }
-
-    /// <summary>
     /// 数据文件信息
     /// </summary>
     public class StoreInfo
@@ -801,675 +506,6 @@ namespace jtools_outlook
         public Outlook.Store Store { get; set; }
         public string DisplayName { get; set; }
         public bool IsArchive { get; set; }
-    }
-
-    /// <summary>
-    /// 文件夹差异分析窗体
-    /// </summary>
-    public class FolderDiffForm : Form
-    {
-        private List<FolderDiffInfo> _folderDiffs;
-        private ListView lvFolders;
-        private Button btnOK;
-        private Button btnCancel;
-        private Button btnSelectAll;
-        private Button btnDeselectAll;
-
-        public List<FolderDiffInfo> SelectedFolders { get; private set; }
-
-        public FolderDiffForm(List<FolderDiffInfo> folderDiffs)
-        {
-            _folderDiffs = folderDiffs;
-            SelectedFolders = new List<FolderDiffInfo>();
-            InitializeComponent();
-            LoadFolderDiffs();
-        }
-
-        private void InitializeComponent()
-        {
-            this.Text = "文件夹差异分析";
-            this.Width = 800;
-            this.Height = 550;
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.MinimizeBox = false;
-
-            var tableLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                Padding = new Padding(10)
-            };
-
-            // 标题面板
-            var titlePanel = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Height = 55
-            };
-
-            var titleLabel = new Label
-            {
-                Text = $"发现 {_folderDiffs.Count} 个文件夹有差异，请选择要同步的文件夹",
-                Dock = DockStyle.Top,
-                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 11, System.Drawing.FontStyle.Bold),
-                ForeColor = System.Drawing.Color.SteelBlue,
-                Height = 30
-            };
-
-            var hintLabel = new Label
-            {
-                Text = "勾选要同步的文件夹，差异数为正表示联机存档比本地多的邮件数量",
-                Dock = DockStyle.Bottom,
-                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9),
-                ForeColor = System.Drawing.Color.Gray,
-                Height = 25
-            };
-
-            titlePanel.Controls.Add(titleLabel);
-            titlePanel.Controls.Add(hintLabel);
-
-            // 按钮面板
-            var buttonPanel = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 45
-            };
-
-            // ListView 表格
-            lvFolders = new ListView
-            {
-                Dock = DockStyle.Fill,
-                View = System.Windows.Forms.View.Details,
-                CheckBoxes = true,
-                FullRowSelect = true,
-                GridLines = true,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9)
-            };
-
-            // 添加列
-            lvFolders.Columns.Add("选择", 50, HorizontalAlignment.Center);
-            lvFolders.Columns.Add("文件夹路径", 350, HorizontalAlignment.Left);
-            lvFolders.Columns.Add("联机存档", 90, HorizontalAlignment.Right);
-            lvFolders.Columns.Add("本地PST", 90, HorizontalAlignment.Right);
-            lvFolders.Columns.Add("差异数(待同步)", 110, HorizontalAlignment.Right);
-
-            // 统计信息标签
-            int totalDiffCount = _folderDiffs.Sum(f => f.DiffCount);
-            var statsLabel = new Label
-            {
-                Text = $"总计: {_folderDiffs.Count} 个文件夹, {totalDiffCount} 封邮件待同步",
-                Dock = DockStyle.Bottom,
-                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9, System.Drawing.FontStyle.Bold),
-                ForeColor = System.Drawing.Color.SteelBlue,
-                Height = 25
-            };
-
-            btnSelectAll = new Button
-            {
-                Text = "全选",
-                Width = 70,
-                Height = 28,
-                Left = 10,
-                Top = 8
-            };
-            btnSelectAll.Click += (s, e) =>
-            {
-                foreach (ListViewItem item in lvFolders.Items)
-                    item.Checked = true;
-            };
-
-            btnDeselectAll = new Button
-            {
-                Text = "全不选",
-                Width = 70,
-                Height = 28,
-                Left = 90,
-                Top = 8
-            };
-            btnDeselectAll.Click += (s, e) =>
-            {
-                foreach (ListViewItem item in lvFolders.Items)
-                    item.Checked = false;
-            };
-
-            btnOK = new Button
-            {
-                Text = "开始同步",
-                Width = 90,
-                Height = 28,
-                Left = 580,
-                Top = 8
-            };
-            btnOK.Click += BtnOK_Click;
-
-            btnCancel = new Button
-            {
-                Text = "取消",
-                Width = 70,
-                Height = 28,
-                Left = 680,
-                Top = 8,
-                DialogResult = DialogResult.Cancel
-            };
-
-            buttonPanel.Controls.Add(btnSelectAll);
-            buttonPanel.Controls.Add(btnDeselectAll);
-            buttonPanel.Controls.Add(btnOK);
-            buttonPanel.Controls.Add(btnCancel);
-
-            tableLayout.Controls.Add(titlePanel, 0, 0);
-            tableLayout.Controls.Add(lvFolders, 0, 1);
-
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-            this.Controls.Add(tableLayout);
-            this.Controls.Add(statsLabel);
-            this.Controls.Add(buttonPanel);
-
-            this.AcceptButton = btnOK;
-            this.CancelButton = btnCancel;
-        }
-
-        private void LoadFolderDiffs()
-        {
-            lvFolders.Items.Clear();
-            foreach (var diff in _folderDiffs)
-            {
-                var item = new ListViewItem("");  // 复选框列
-                item.SubItems.Add(diff.FolderPath);
-                item.SubItems.Add(diff.SourceCount.ToString("N0"));
-                item.SubItems.Add(diff.TargetCount.ToString("N0"));
-                item.SubItems.Add(diff.DiffCount.ToString("N0"));
-                item.Checked = true;
-                item.Tag = diff;  // 存储 FolderDiffInfo 对象
-                lvFolders.Items.Add(item);
-            }
-        }
-
-        private void BtnOK_Click(object sender, EventArgs e)
-        {
-            SelectedFolders.Clear();
-            foreach (ListViewItem item in lvFolders.Items)
-            {
-                if (item.Checked)
-                {
-                    SelectedFolders.Add((FolderDiffInfo)item.Tag);
-                }
-            }
-
-            if (SelectedFolders.Count == 0)
-            {
-                MessageBox.Show("请至少选择一个文件夹进行同步。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            int totalEmails = SelectedFolders.Sum(f => f.DiffCount);
-            var result = MessageBox.Show($"已选择 {SelectedFolders.Count} 个文件夹，共 {totalEmails} 封邮件需要同步。\n\n是否开始同步？", 
-                "确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-
-            if (result == DialogResult.Yes)
-            {
-                this.DialogResult = DialogResult.OK;
-                this.Close();
-            }
-        }
-    }
-
-    /// <summary>
-    /// 分析进度窗体（带日志显示）
-    /// </summary>
-    public class AnalysisProgressForm : Form
-    {
-        private ProgressBar progressBar;
-        private Label lblStatus;
-        private Label lblProgress;
-        private TextBox txtLog;
-        private Button btnCopyLog;
-        private Button btnClose;
-        private StringBuilder logBuilder;
-
-        public AnalysisProgressForm()
-        {
-            logBuilder = new StringBuilder();
-            InitializeComponent();
-        }
-
-        private void InitializeComponent()
-        {
-            this.Text = "正在分析文件夹差异";
-            this.Width = 700;
-            this.Height = 500;
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.MaximizeBox = true;
-            this.MinimizeBox = false;
-
-            var mainLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 3,
-                Padding = new Padding(10)
-            };
-
-            // 顶部面板：状态和进度
-            var topPanel = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Height = 80
-            };
-
-            // 状态标签
-            lblStatus = new Label
-            {
-                Text = "正在初始化...",
-                Dock = DockStyle.Top,
-                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 10),
-                Height = 25
-            };
-
-            // 进度条
-            progressBar = new ProgressBar
-            {
-                Dock = DockStyle.Top,
-                Minimum = 0,
-                Maximum = 100,
-                Value = 0,
-                Height = 25,
-                Margin = new Padding(0, 5, 0, 5)
-            };
-
-            // 进度文字标签
-            lblProgress = new Label
-            {
-                Text = "",
-                Dock = DockStyle.Top,
-                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9),
-                ForeColor = System.Drawing.Color.Gray,
-                Height = 25
-            };
-
-            topPanel.Controls.Add(lblProgress);
-            topPanel.Controls.Add(progressBar);
-            topPanel.Controls.Add(lblStatus);
-
-            // 日志文本框
-            txtLog = new TextBox
-            {
-                Dock = DockStyle.Fill,
-                Multiline = true,
-                ScrollBars = ScrollBars.Vertical,
-                Font = new System.Drawing.Font("Consolas", 9),
-                BackColor = System.Drawing.Color.WhiteSmoke,
-                ReadOnly = true,
-                Text = "=== 分析日志 ===\r\n"
-            };
-
-            // 底部按钮面板 - 使用Panel + FlowLayoutPanel对齐按钮
-            var buttonPanel = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 50
-            };
-
-            var flowPanel = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Right,
-                FlowDirection = FlowDirection.LeftToRight,
-                Width = 200,
-                Height = 50,
-                Padding = new Padding(0, 9, 10, 0)
-            };
-
-            btnCopyLog = new Button
-            {
-                Text = "复制日志",
-                Width = 85,
-                Height = 32,
-                Margin = new Padding(0, 0, 10, 0)
-            };
-            btnCopyLog.Click += (s, e) =>
-            {
-                Clipboard.SetText(txtLog.Text);
-                MessageBox.Show("日志已复制到剪贴板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            };
-
-            btnClose = new Button
-            {
-                Text = "下一步",
-                Width = 85,
-                Height = 32,
-                Margin = new Padding(0, 0, 0, 0),
-                Enabled = false  // 分析期间不可用
-            };
-            btnClose.Click += (s, e) => { this.DialogResult = DialogResult.OK; this.Close(); };
-
-            flowPanel.Controls.Add(btnCopyLog);
-            flowPanel.Controls.Add(btnClose);
-            buttonPanel.Controls.Add(flowPanel);
-
-            // 添加到主布局
-            mainLayout.Controls.Add(topPanel, 0, 0);
-            mainLayout.Controls.Add(txtLog, 0, 1);
-            mainLayout.Controls.Add(buttonPanel, 0, 2);
-
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-
-            this.Controls.Add(mainLayout);
-        }
-
-        public void UpdateStatus(string status)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<string>(UpdateStatus), status);
-                return;
-            }
-            lblStatus.Text = status;
-            System.Windows.Forms.Application.DoEvents();
-        }
-
-        public void UpdateProgress(int current, int total, int percent)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<int, int, int>(UpdateProgress), current, total, percent);
-                return;
-            }
-            progressBar.Value = Math.Min(percent, 100);
-            lblProgress.Text = $"{current} / {total} ({percent}%)";
-            System.Windows.Forms.Application.DoEvents();
-        }
-
-        public void AddLog(string message)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<string>(AddLog), message);
-                return;
-            }
-            string timestamp = DateTime.Now.ToString("HH:mm:ss");
-            string logLine = $"[{timestamp}] {message}\r\n";
-            logBuilder.Append(logLine);
-            txtLog.AppendText(logLine);
-
-            // 确保滚动到最后一行
-            txtLog.SelectionStart = txtLog.Text.Length;
-            txtLog.SelectionLength = 0;
-            txtLog.ScrollToCaret();
-            txtLog.Refresh();
-
-            System.Windows.Forms.Application.DoEvents();
-        }
-
-        public void Complete(string message)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<string>(Complete), message);
-                return;
-            }
-            lblStatus.Text = message;
-            lblStatus.ForeColor = System.Drawing.Color.Green;
-            progressBar.Value = 100;
-            btnClose.Enabled = true;  // 分析完成，启用"下一步"按钮
-            btnClose.Text = "下一步";  // 确保文本正确
-            this.ControlBox = true; // 允许关闭窗口
-            AddLog($"=== {message} ===");
-            System.Windows.Forms.Application.DoEvents();
-        }
-
-        public string GetLogText()
-        {
-            return logBuilder.ToString();
-        }
-
-        /// <summary>
-        /// 等待用户手动关闭窗体
-        /// </summary>
-        public void WaitForClose()
-        {
-            // 启用关闭按钮
-            btnClose.Enabled = true;
-            
-            // 使用ShowDialog模式等待用户关闭
-            // 由于在分析前已经Show()过了，这里我们用循环等待的方式
-            while (this.Visible)
-            {
-                System.Windows.Forms.Application.DoEvents();
-                System.Threading.Thread.Sleep(100);
-            }
-        }
-    }
-
-    /// <summary>
-    /// 同步进度窗体
-    /// </summary>
-    public class SyncProgressForm : Form
-    {
-        private ProgressBar progressBar;
-        private Label lblStatus;
-        private Label lblCurrentFolder;
-        private TextBox txtLog;
-        private Button btnCancel;
-        private Button btnCopyLog;
-        private const int MAX_LOG_LINES = 1000;
-
-        public bool IsCancelled { get; private set; }
-        private int _totalEmails;
-
-        public SyncProgressForm(string appVersion, int totalEmails)
-        {
-            _totalEmails = totalEmails;
-            IsCancelled = false;
-            InitializeComponent();
-        }
-
-        private void InitializeComponent()
-        {
-            this.Text = "正在同步邮件";
-            this.Width = 700;
-            this.Height = 500;
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.ControlBox = false;
-
-            var tableLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 4,
-                Padding = new Padding(15)
-            };
-
-            // 顶部面板：状态和进度
-            var topPanel = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Height = 80
-            };
-
-            // 状态标签
-            lblStatus = new Label
-            {
-                Text = $"准备同步 {_totalEmails} 封邮件...",
-                Dock = DockStyle.Top,
-                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 10),
-                Height = 25
-            };
-
-            // 进度条
-            progressBar = new ProgressBar
-            {
-                Dock = DockStyle.Top,
-                Minimum = 0,
-                Maximum = _totalEmails,
-                Value = 0,
-                Height = 25,
-                Margin = new Padding(0, 5, 0, 5)
-            };
-
-            // 当前文件夹标签
-            lblCurrentFolder = new Label
-            {
-                Text = "",
-                Dock = DockStyle.Top,
-                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9),
-                ForeColor = System.Drawing.Color.Gray,
-                Height = 25
-            };
-
-            topPanel.Controls.Add(lblCurrentFolder);
-            topPanel.Controls.Add(progressBar);
-            topPanel.Controls.Add(lblStatus);
-
-            // 日志文本框
-            txtLog = new TextBox
-            {
-                Dock = DockStyle.Fill,
-                Multiline = true,
-                ScrollBars = ScrollBars.Vertical,
-                Font = new System.Drawing.Font("Consolas", 9),
-                BackColor = System.Drawing.Color.WhiteSmoke,
-                ReadOnly = true,
-                Text = "=== 同步日志 ===\r\n"
-            };
-
-            // 底部按钮面板
-            var buttonPanel = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 50
-            };
-
-            var flowPanel = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Right,
-                FlowDirection = FlowDirection.LeftToRight,
-                Width = 250,
-                Height = 50,
-                Padding = new Padding(0, 8, 10, 0)
-            };
-
-            btnCopyLog = new Button
-            {
-                Text = "复制日志",
-                Width = 90,
-                Height = 32,
-                Margin = new Padding(0, 0, 10, 0)
-            };
-            btnCopyLog.Click += (s, e) =>
-            {
-                try
-                {
-                    Clipboard.SetText(txtLog.Text);
-                    MessageBox.Show("日志已复制到剪贴板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch { }
-            };
-
-            btnCancel = new Button
-            {
-                Text = "取消同步",
-                Width = 90,
-                Height = 32,
-                Margin = new Padding(0, 0, 0, 0)
-            };
-            btnCancel.Click += (s, e) =>
-            {
-                IsCancelled = true;
-                lblStatus.Text = "正在取消，请稍候...";
-                AddLog("用户请求取消同步...");
-            };
-
-            flowPanel.Controls.Add(btnCopyLog);
-            flowPanel.Controls.Add(btnCancel);
-            buttonPanel.Controls.Add(flowPanel);
-
-            tableLayout.Controls.Add(topPanel, 0, 0);
-            tableLayout.Controls.Add(txtLog, 0, 1);
-            tableLayout.Controls.Add(buttonPanel, 0, 2);
-
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-
-            this.Controls.Add(tableLayout);
-        }
-
-        public void AddLog(string message)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<string>(AddLog), message);
-                return;
-            }
-
-            string timestamp = DateTime.Now.ToString("HH:mm:ss");
-            string logLine = $"[{timestamp}] {message}\r\n";
-
-            // 添加新日志
-            txtLog.AppendText(logLine);
-
-            // 限制日志行数不超过1000行
-            var lines = txtLog.Lines;
-            if (lines.Length > MAX_LOG_LINES)
-            {
-                // 保留最新的1000行
-                var newLines = new string[MAX_LOG_LINES];
-                Array.Copy(lines, lines.Length - MAX_LOG_LINES, newLines, 0, MAX_LOG_LINES);
-                txtLog.Lines = newLines;
-            }
-
-            // 自动滚动到最后一行
-            txtLog.SelectionStart = txtLog.Text.Length;
-            txtLog.SelectionLength = 0;
-            txtLog.ScrollToCaret();
-            txtLog.Refresh();
-        }
-
-        public void UpdateProgress(int processed, int total, string currentFolder)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<int, int, string>(UpdateProgress), processed, total, currentFolder);
-                return;
-            }
-
-            progressBar.Value = Math.Min(processed, total);
-            int percent = total > 0 ? (int)((double)processed / total * 100) : 0;
-            lblStatus.Text = $"已处理: {processed} / {total} ({percent}%)";
-            lblCurrentFolder.Text = $"当前: {currentFolder}";
-        }
-
-        public void Complete()
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action(Complete));
-                return;
-            }
-
-            btnCancel.Text = "关闭";
-            btnCancel.Click -= (s, e) => { };
-            btnCancel.Click += (s, e) => this.Close();
-            this.ControlBox = true;
-            AddLog("同步完成！");
-        }
     }
 
     /// <summary>
@@ -1509,7 +545,7 @@ namespace jtools_outlook
             // 版本号
             var lblVersion = new Label
             {
-                Text = "版本 v1.0.9",
+                Text = "版本 v1.1.0",
                 Dock = DockStyle.Fill,
                 TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
                 Font = new System.Drawing.Font("Microsoft Sans Serif", 11),
@@ -1584,7 +620,33 @@ namespace jtools_outlook
     }
 
     /// <summary>
-    /// 下载联机向导窗口 - 上下分栏布局
+    /// 年度邮件统计信息
+    /// </summary>
+    public class YearlyMailStats
+    {
+        public int Year { get; set; }
+        public int InboxCount { get; set; }
+        public int SentCount { get; set; }
+        public Outlook.MAPIFolder InboxFolder { get; set; }
+        public Outlook.MAPIFolder SentFolder { get; set; }
+    }
+
+    /// <summary>
+    /// 年度邮件统计项（用于显示）
+    /// </summary>
+    public class YearlyStatsItem
+    {
+        public int Year { get; set; }
+        public int OnlineInboxCount { get; set; }
+        public int OnlineSentCount { get; set; }
+        public int LocalInboxCount { get; set; }
+        public int LocalSentCount { get; set; }
+        public YearlyMailStats OnlineStats { get; set; }
+        public YearlyMailStats LocalStats { get; set; }
+    }
+
+    /// <summary>
+    /// 下载联机向导窗口 - 左右分栏布局
     /// </summary>
     public class DownloadOnlineWizardForm : Form
     {
@@ -1595,16 +657,16 @@ namespace jtools_outlook
         {
             SelectDataFiles = 0,    // 选择数据文件
             Analyzing = 1,          // 分析差异
-            SelectFolders = 2,      // 选择同步文件夹
-            Syncing = 3             // 同步中
+            Syncing = 2             // 同步中
         }
 
         private WizardStep currentStep = WizardStep.SelectDataFiles;
 
-        // 上部分控件
-        private Panel wizardPanel;
+        // 主布局控件
+        private Panel mainPanel;
+        private Panel topPanel;
+        private Panel bottomPanel;
         private Label lblStepTitle;
-        private Button btnPrevious;
         private Button btnNext;
         private Button btnCancel;
 
@@ -1614,17 +676,17 @@ namespace jtools_outlook
         private ProgressBar progressLoading;
         private Label lblLoading;
 
-        // 步骤2：分析差异（进度条）
-        private ProgressBar progressAnalyze;
-        private Label lblAnalyzeStatus;
-
-        // 步骤3：选择文件夹
-        private ListView lvFolders;
+        // 步骤2：左右分栏显示
+        private TableLayoutPanel statsLayout;
+        private ListView lvOnlineStats;      // 左侧：联机数据
+        private ListView lvLocalStats;       // 右侧：本地数据
+        private Label lblOnlineTitle;
+        private Label lblLocalTitle;
         private Button btnSelectAll;
         private Button btnDeselectAll;
-        private Label lblFolderStats;
+        private Label lblStatsSummary;
 
-        // 步骤4：同步进度
+        // 步骤3：同步进度
         private ProgressBar progressSync;
         private Label lblSyncStatus;
 
@@ -1636,28 +698,39 @@ namespace jtools_outlook
         private Outlook.Application _application;
         private List<StoreInfo> _sourceStores;
         private List<StoreInfo> _targetStores;
-        private Outlook.MAPIFolder _sourceRoot;
-        private Outlook.MAPIFolder _targetRoot;
-        private List<FolderDiffInfo> _folderDiffs;
-        private List<FolderDiffInfo> _selectedFolders;
+        private Outlook.Store _sourceStore;
+        private Outlook.Store _targetStore;
+        private List<YearlyStatsItem> _yearlyStats;
+        private List<YearlyStatsItem> _selectedYears;
 
-        public bool IsCancelled { get; private set; }
+        // BackgroundWorker 用于后台同步
+        private System.ComponentModel.BackgroundWorker _syncWorker;
+        private volatile bool _isCancelled = false;
+        public bool IsCancelled => _isCancelled;
+
+        public void CancelSync()
+        {
+            _isCancelled = true;
+            if (_syncWorker != null && _syncWorker.IsBusy)
+            {
+                _syncWorker.CancelAsync();
+            }
+        }
 
         public DownloadOnlineWizardForm(Outlook.Application application)
         {
             _application = application;
             _sourceStores = new List<StoreInfo>();
             _targetStores = new List<StoreInfo>();
-            _folderDiffs = new List<FolderDiffInfo>();
-            _selectedFolders = new List<FolderDiffInfo>();
-            IsCancelled = false;
+            _yearlyStats = new List<YearlyStatsItem>();
+            _selectedYears = new List<YearlyStatsItem>();
+            _isCancelled = false;
 
             InitializeComponent();
 
             // 使用 Load 事件，确保窗口先显示出来再加载数据
             this.Load += (s, e) =>
             {
-                // 延迟100毫秒再加载数据，确保窗口完全显示
                 var timer = new System.Windows.Forms.Timer();
                 timer.Interval = 100;
                 timer.Tick += (sender, args) =>
@@ -1672,41 +745,24 @@ namespace jtools_outlook
 
         private void InitializeComponent()
         {
-            this.Text = "下载联机存档 - 向导";
-            this.Width = 900;
-            this.Height = 700;
+            this.Text = "下载联机存档";
+            this.Width = 1000;
+            this.Height = 750;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.MaximizeBox = true;  // 允许最大化
-            this.MinimizeBox = true;  // 允许最小化
-            this.ShowInTaskbar = true;  // 显示在任务栏
+            this.MaximizeBox = true;
+            this.MinimizeBox = true;
+            this.ShowInTaskbar = true;
 
-            // 添加窗口大小改变事件处理
-            this.Resize += (s, e) =>
-            {
-                // 窗口大小改变时，确保日志滚动到底部
-                if (txtLog != null && txtLog.IsHandleCreated)
-                {
-                    this.BeginInvoke(new System.Action(() =>
-                    {
-                        txtLog.SelectionStart = txtLog.Text.Length;
-                        txtLog.SelectionLength = 0;
-                        txtLog.ScrollToCaret();
-                        txtLog.Refresh();
-                    }));
-                }
-            };
-
-            var mainLayout = new TableLayoutPanel
+            // 主布局：上下分割
+            mainPanel = new Panel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
                 Padding = new Padding(10)
             };
 
             // 上部分：向导区域
-            wizardPanel = new Panel
+            topPanel = new Panel
             {
                 Dock = DockStyle.Fill,
                 BorderStyle = BorderStyle.FixedSingle
@@ -1730,23 +786,12 @@ namespace jtools_outlook
                 Height = 50
             };
 
-            btnPrevious = new Button
-            {
-                Text = "上一步",
-                Width = 90,
-                Height = 32,
-                Left = 10,
-                Top = 9,
-                Enabled = false
-            };
-            btnPrevious.Click += BtnPrevious_Click;
-
             btnNext = new Button
             {
                 Text = "下一步",
-                Width = 90,
+                Width = 100,
                 Height = 32,
-                Left = 110,
+                Left = 10,
                 Top = 9,
                 Enabled = false
             };
@@ -1764,7 +809,6 @@ namespace jtools_outlook
             {
                 if (currentStep == WizardStep.Syncing)
                 {
-                    // 同步过程中取消
                     var result = MessageBox.Show(
                         "确定要取消同步吗？\n\n已同步的邮件将保留，未同步的邮件将不会继续同步。",
                         "确认取消",
@@ -1773,37 +817,30 @@ namespace jtools_outlook
 
                     if (result == DialogResult.Yes)
                     {
-                        IsCancelled = true;
+                        CancelSync();  // 使用新方法，立即设置取消标志
                         AddLog("用户取消同步操作");
+                        btnCancel.Enabled = false;  // 禁用按钮，防止重复点击
+                        btnCancel.Text = "正在取消...";
                     }
                 }
                 else
                 {
-                    // 其他步骤直接关闭
-                    IsCancelled = true;
+                    CancelSync();
                     this.Close();
                 }
             };
 
-            navPanel.Controls.Add(btnPrevious);
             navPanel.Controls.Add(btnNext);
             navPanel.Controls.Add(btnCancel);
 
-            wizardPanel.Controls.Add(lblStepTitle);
-            wizardPanel.Controls.Add(navPanel);
-            
-            // 添加一个占位符 Panel，用于后续替换为内容面板
-            var contentPlaceholder = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Visible = false
-            };
-            wizardPanel.Controls.Add(contentPlaceholder);
+            topPanel.Controls.Add(lblStepTitle);
+            topPanel.Controls.Add(navPanel);
 
             // 下部分：日志区域
-            var logPanel = new Panel
+            bottomPanel = new Panel
             {
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Bottom,
+                Height = 200,
                 BorderStyle = BorderStyle.FixedSingle
             };
 
@@ -1824,22 +861,24 @@ namespace jtools_outlook
                 Font = new System.Drawing.Font("Consolas", 9),
                 BackColor = System.Drawing.Color.WhiteSmoke,
                 ReadOnly = true,
-                Text = "=== 操作日志 ===\r\n"
+                Text = "=== 操作日志 ===\r\n",
+                Margin = new Padding(5),
+                Padding = new Padding(3, 5, 3, 5)  // 上下增加内边距，避免文字被遮挡
             };
 
             var logButtonPanel = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 40
+                Height = 35
             };
 
             btnCopyLog = new Button
             {
                 Text = "复制日志",
                 Width = 90,
-                Height = 28,
+                Height = 26,
                 Left = 10,
-                Top = 6
+                Top = 4
             };
             btnCopyLog.Click += (s, e) =>
             {
@@ -1852,17 +891,14 @@ namespace jtools_outlook
             };
 
             logButtonPanel.Controls.Add(btnCopyLog);
-            logPanel.Controls.Add(logButtonPanel);
-            logPanel.Controls.Add(txtLog);
-            logPanel.Controls.Add(logTitleLabel);
+            bottomPanel.Controls.Add(logButtonPanel);
+            bottomPanel.Controls.Add(txtLog);
+            bottomPanel.Controls.Add(logTitleLabel);
 
-            mainLayout.Controls.Add(wizardPanel, 0, 0);
-            mainLayout.Controls.Add(logPanel, 0, 1);
+            mainPanel.Controls.Add(topPanel);
+            mainPanel.Controls.Add(bottomPanel);
 
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
-
-            this.Controls.Add(mainLayout);
+            this.Controls.Add(mainPanel);
 
             ShowStep(WizardStep.SelectDataFiles);
         }
@@ -1871,82 +907,53 @@ namespace jtools_outlook
         {
             currentStep = step;
 
-            AddLog($"[DEBUG] ShowStep called: {step}");
+            // 移除旧的内容面板
+            var oldContent = topPanel.Controls.OfType<Panel>().FirstOrDefault(p => p.Name == "contentPanel");
+            if (oldContent != null)
+            {
+                topPanel.Controls.Remove(oldContent);
+                oldContent.Dispose();
+            }
 
-            // 移除步骤三特有的按钮（全选、全不选）
-            var navPanel = wizardPanel.Controls[1] as Panel;
+            // 移除全选/全不选按钮
+            var navPanel = topPanel.Controls.OfType<Panel>().FirstOrDefault(p => p.Dock == DockStyle.Bottom);
             if (navPanel != null)
             {
-                var buttonsToRemove = new List<Control>();
-                foreach (Control ctrl in navPanel.Controls)
-                {
-                    if (ctrl == btnSelectAll || ctrl == btnDeselectAll)
-                        buttonsToRemove.Add(ctrl);
-                }
-                foreach (var ctrl in buttonsToRemove)
-                    navPanel.Controls.Remove(ctrl);
+                var buttonsToRemove = navPanel.Controls.OfType<Button>()
+                    .Where(b => b.Text == "全选" || b.Text == "全不选").ToList();
+                foreach (var btn in buttonsToRemove)
+                    navPanel.Controls.Remove(btn);
             }
 
-            // 移除旧的 contentPanel（占位符索引为2）
-            if (wizardPanel.Controls.Count > 2)
-            {
-                var oldContent = wizardPanel.Controls[2];
-                if (oldContent != null && oldContent is Panel)
-                {
-                    wizardPanel.Controls.Remove(oldContent);
-                    oldContent.Dispose();
-                    AddLog($"[DEBUG] Removed old content panel");
-                }
-            }
-
-            AddLog($"[DEBUG] wizardPanel.Controls.Count after removal: {wizardPanel.Controls.Count}");
-
-            // 根据步骤显示不同内容
             switch (step)
             {
                 case WizardStep.SelectDataFiles:
                     ShowSelectDataFilesStep();
                     break;
                 case WizardStep.Analyzing:
-                    ShowAnalyzingStep();
-                    break;
-                case WizardStep.SelectFolders:
-                    ShowSelectFoldersStep();
+                    ShowYearlyStatsStep();
                     break;
                 case WizardStep.Syncing:
                     ShowSyncingStep();
                     break;
             }
 
-            AddLog($"[DEBUG] wizardPanel.Controls.Count after adding content: {wizardPanel.Controls.Count}");
-
-            AddLog($"[DEBUG] Step content shown");
-
-            // 更新导航按钮状态
-            btnPrevious.Enabled = (step != WizardStep.SelectDataFiles && step != WizardStep.Syncing);
-            // btnNext 的启用状态由各步骤自己控制，不要在这里覆盖
-            // btnCancel 在同步过程中保持可用，让用户可以随时取消
+            // 更新按钮状态
             btnCancel.Enabled = true;
-            if (step == WizardStep.Syncing)
-            {
-                btnCancel.Text = "取消同步";
-            }
-            else
-            {
-                btnCancel.Text = "取消";
-            }
+            btnCancel.Text = step == WizardStep.Syncing ? "取消同步" : "取消";
 
             AddLog($"[DEBUG] ShowStep completed");
         }
 
         private void ShowSelectDataFilesStep()
         {
-            lblStepTitle.Text = "步骤 1/4: 选择数据文件";
+            lblStepTitle.Text = "步骤 1/2: 选择数据文件";
 
             var contentPanel = new Panel
             {
+                Name = "contentPanel",
                 Dock = DockStyle.Fill,
-                Padding = new Padding(20, 10, 20, 20)  // 左, 上, 右, 下
+                Padding = new Padding(20, 10, 20, 20)
             };
 
             // 加载状态
@@ -2014,11 +1021,12 @@ namespace jtools_outlook
             // 提示
             var hintLabel = new Label
             {
-                Text = "提示：源数据文件是Office 365联机存档，目标数据文件是本地PST文件",
+                Text = "提示：源数据文件是Office 365联机存档，目标数据文件是本地PST文件。\n将统计收件箱和已发送邮件的邮件数量，按年份显示。",
                 Dock = DockStyle.Bottom,
-                Height = 30,
+                Height = 60,
                 ForeColor = System.Drawing.Color.Gray,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 8)
+                Font = new System.Drawing.Font("Microsoft Sans Serif", 8),
+                Padding = new Padding(5, 8, 5, 8)  // 上下增加内边距
             };
 
             contentPanel.Controls.Add(hintLabel);
@@ -2028,184 +1036,170 @@ namespace jtools_outlook
             contentPanel.Controls.Add(sourceLabel);
             contentPanel.Controls.Add(loadingPanel);
 
-            // 替换占位符 Panel（索引为2）
-            if (wizardPanel.Controls.Count > 2)
-            {
-                var placeholder = wizardPanel.Controls[2];
-                wizardPanel.Controls.Remove(placeholder);
-                placeholder.Dispose();
-            }
-            wizardPanel.Controls.Add(contentPanel);
+            topPanel.Controls.Add(contentPanel);
 
-            // 初始化按钮状态
             btnNext.Enabled = false;
         }
 
-        private void ShowAnalyzingStep()
+        private void ShowYearlyStatsStep()
         {
-            lblStepTitle.Text = "步骤 2/4: 分析文件夹差异";
+            lblStepTitle.Text = "步骤 2/2: 选择要下载的年份";
 
             var contentPanel = new Panel
+            {
+                Name = "contentPanel",
+                Dock = DockStyle.Fill,
+                Padding = new Padding(10, 60, 10, 10)  // 顶部留出60像素空白
+            };
+
+            // 创建左右分栏布局容器
+            var tableContainer = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 380  // 固定高度，约15行数据
+            };
+
+            // 创建左右分栏布局
+            statsLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(20, 10, 20, 20)  // 左, 上, 右, 下
+                ColumnCount = 2,
+                RowCount = 2,
+                Padding = new Padding(5)
             };
+            statsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            statsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            statsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));  // 标题行高度增加50%
+            statsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            lblAnalyzeStatus = new Label
+            // 左侧标题：联机数据
+            lblOnlineTitle = new Label
             {
-                Text = "正在分析...",
-                Dock = DockStyle.Top,
+                Text = "【联机存档】",
+                Dock = DockStyle.Fill,
+                Font = new System.Drawing.Font("Microsoft Sans Serif", 11, System.Drawing.FontStyle.Bold),
+                ForeColor = System.Drawing.Color.White,
+                BackColor = System.Drawing.Color.SteelBlue,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Margin = new Padding(0)
+            };
+            statsLayout.Controls.Add(lblOnlineTitle, 0, 0);
+
+            // 右侧标题：本地数据
+            lblLocalTitle = new Label
+            {
+                Text = "【本地PST】",
+                Dock = DockStyle.Fill,
+                Font = new System.Drawing.Font("Microsoft Sans Serif", 11, System.Drawing.FontStyle.Bold),
+                ForeColor = System.Drawing.Color.White,
+                BackColor = System.Drawing.Color.SeaGreen,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Margin = new Padding(0)
+            };
+            statsLayout.Controls.Add(lblLocalTitle, 1, 0);
+
+            // 左侧：联机数据列表（带复选框）
+            lvOnlineStats = new ListView
+            {
+                View = System.Windows.Forms.View.Details,
+                FullRowSelect = true,
+                GridLines = true,
+                Dock = DockStyle.Fill,
+                CheckBoxes = true
+            };
+            lvOnlineStats.Columns.Add("年份", 60, HorizontalAlignment.Center);
+            lvOnlineStats.Columns.Add("收件箱", 80, HorizontalAlignment.Right);
+            lvOnlineStats.Columns.Add("已发送", 80, HorizontalAlignment.Right);
+            lvOnlineStats.Columns.Add("合计", 80, HorizontalAlignment.Right);
+            lvOnlineStats.ItemChecked += (s, e) => UpdateStatsSummary();
+            statsLayout.Controls.Add(lvOnlineStats, 0, 1);
+
+            // 右侧：本地数据列表（不带复选框）
+            lvLocalStats = new ListView
+            {
+                View = System.Windows.Forms.View.Details,
+                FullRowSelect = true,
+                GridLines = true,
+                Dock = DockStyle.Fill,
+                CheckBoxes = false
+            };
+            lvLocalStats.Columns.Add("年份", 60, HorizontalAlignment.Center);
+            lvLocalStats.Columns.Add("收件箱", 80, HorizontalAlignment.Right);
+            lvLocalStats.Columns.Add("已发送", 80, HorizontalAlignment.Right);
+            lvLocalStats.Columns.Add("合计", 80, HorizontalAlignment.Right);
+            statsLayout.Controls.Add(lvLocalStats, 1, 1);
+
+            tableContainer.Controls.Add(statsLayout);
+            contentPanel.Controls.Add(tableContainer);
+
+            // 底部统计信息
+            lblStatsSummary = new Label
+            {
+                Dock = DockStyle.Bottom,
                 Height = 30,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 10)
+                Font = new System.Drawing.Font("Microsoft Sans Serif", 9, System.Drawing.FontStyle.Bold),
+                ForeColor = System.Drawing.Color.SteelBlue,
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+                Padding = new Padding(10, 0, 0, 0)
             };
+            contentPanel.Controls.Add(lblStatsSummary);
 
-            progressAnalyze = new ProgressBar
-            {
-                Dock = DockStyle.Top,
-                Height = 30,
-                Minimum = 0,
-                Maximum = 100
-            };
+            topPanel.Controls.Add(contentPanel);
 
-            contentPanel.Controls.Add(progressAnalyze);
-            contentPanel.Controls.Add(lblAnalyzeStatus);
-
-            // 替换占位符 Panel（索引为2）
-            if (wizardPanel.Controls.Count > 2)
-            {
-                var placeholder = wizardPanel.Controls[2];
-                wizardPanel.Controls.Remove(placeholder);
-                placeholder.Dispose();
-            }
-            wizardPanel.Controls.Add(contentPanel);
-
-            // 分析过程中禁用下一步按钮
-            btnNext.Enabled = false;
-        }
-
-        private void ShowSelectFoldersStep()
-        {
-            AddLog("[DEBUG] ShowSelectFoldersStep started");
-            lblStepTitle.Text = "步骤 3/4: 选择要同步的文件夹";
-
-            // 创建主内容面板
-            var contentPanel = new Panel
-            {
-                Dock = DockStyle.Fill
-            };
-
-            // 创建全选和全不选按钮，添加到导航面板
-            btnSelectAll = new Button
-            {
-                Text = "全选",
-                Width = 80,
-                Height = 32,
-                Left = 300,
-                Top = 9
-            };
-            btnSelectAll.Click += (s, e) =>
-            {
-                foreach (ListViewItem item in lvFolders.Items)
-                    item.Checked = true;
-                UpdateFolderStats();
-            };
-
-            btnDeselectAll = new Button
-            {
-                Text = "全不选",
-                Width = 80,
-                Height = 32,
-                Left = 390,
-                Top = 9
-            };
-            btnDeselectAll.Click += (s, e) =>
-            {
-                foreach (ListViewItem item in lvFolders.Items)
-                    item.Checked = false;
-                UpdateFolderStats();
-            };
-
-            // 将按钮添加到导航面板
-            var navPanel = wizardPanel.Controls[1] as Panel;
+            // 添加全选/全不选按钮
+            var navPanel = topPanel.Controls.OfType<Panel>().FirstOrDefault(p => p.Dock == DockStyle.Bottom);
             if (navPanel != null)
             {
+                btnSelectAll = new Button
+                {
+                    Text = "全选",
+                    Width = 80,
+                    Height = 32,
+                    Left = 120,
+                    Top = 9
+                };
+                btnSelectAll.Click += (s, e) =>
+                {
+                    foreach (ListViewItem item in lvOnlineStats.Items)
+                        item.Checked = true;
+                };
+
+                btnDeselectAll = new Button
+                {
+                    Text = "全不选",
+                    Width = 80,
+                    Height = 32,
+                    Left = 210,
+                    Top = 9
+                };
+                btnDeselectAll.Click += (s, e) =>
+                {
+                    foreach (ListViewItem item in lvOnlineStats.Items)
+                        item.Checked = false;
+                };
+
                 navPanel.Controls.Add(btnSelectAll);
                 navPanel.Controls.Add(btnDeselectAll);
             }
 
-            // 创建 ListView
-            lvFolders = new ListView
-            {
-                View = System.Windows.Forms.View.Details,
-                CheckBoxes = true,
-                FullRowSelect = true,
-                GridLines = true,
-                Location = new System.Drawing.Point(20, 50),  // 增加顶部间距到50
-                Size = new System.Drawing.Size(840, 260)      // 相应减少高度
-            };
-
-            lvFolders.Columns.Add("选择", 50, HorizontalAlignment.Center);
-            lvFolders.Columns.Add("文件夹路径", 400, HorizontalAlignment.Left);
-            lvFolders.Columns.Add("联机存档", 90, HorizontalAlignment.Right);
-            lvFolders.Columns.Add("本地PST", 90, HorizontalAlignment.Right);
-            lvFolders.Columns.Add("差异数", 90, HorizontalAlignment.Right);
-
-            lvFolders.ItemChecked += (s, e) => UpdateFolderStats();
-
-            // 创建统计标签
-            lblFolderStats = new Label
-            {
-                Location = new System.Drawing.Point(20, 320),  // 保持位置不变
-                Size = new System.Drawing.Size(840, 25),
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9, System.Drawing.FontStyle.Bold),
-                ForeColor = System.Drawing.Color.SteelBlue,
-                TextAlign = System.Drawing.ContentAlignment.MiddleRight
-            };
-
-            // 创建表头标签
-            var headerLabel = new Label
-            {
-                Text = "文件夹列表：",
-                Location = new System.Drawing.Point(20, 5),
-                Size = new System.Drawing.Size(200, 20),
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 9, System.Drawing.FontStyle.Bold)
-            };
-
-            // 添加控件到内容面板
-            contentPanel.Controls.Add(headerLabel);
-            contentPanel.Controls.Add(lvFolders);
-            contentPanel.Controls.Add(lblFolderStats);
-
-            // 替换占位符 Panel
-            if (wizardPanel.Controls.Count > 2)
-            {
-                var placeholder = wizardPanel.Controls[2];
-                wizardPanel.Controls.Remove(placeholder);
-                placeholder.Dispose();
-            }
-            wizardPanel.Controls.Add(contentPanel);
-
-            AddLog($"[DEBUG] ListView Location: {lvFolders.Location}, Size: {lvFolders.Size}");
-
-            // 加载文件夹列表
-            LoadFolderDiffs();
-
-            AddLog("[DEBUG] ShowSelectFoldersStep completed");
+            // 加载数据
+            LoadYearlyStats();
         }
 
         private void ShowSyncingStep()
         {
-            lblStepTitle.Text = "步骤 4/4: 同步邮件";
+            lblStepTitle.Text = "正在下载邮件...";
 
             var contentPanel = new Panel
             {
+                Name = "contentPanel",
                 Dock = DockStyle.Fill,
-                Padding = new Padding(20, 10, 20, 20)  // 左, 上, 右, 下
+                Padding = new Padding(20, 10, 20, 20)
             };
 
             lblSyncStatus = new Label
             {
-                Text = "准备同步...",
+                Text = "准备下载...",
                 Dock = DockStyle.Top,
                 Height = 30,
                 Font = new System.Drawing.Font("Microsoft Sans Serif", 10)
@@ -2222,16 +1216,8 @@ namespace jtools_outlook
             contentPanel.Controls.Add(progressSync);
             contentPanel.Controls.Add(lblSyncStatus);
 
-            // 替换占位符 Panel（索引为2）
-            if (wizardPanel.Controls.Count > 2)
-            {
-                var placeholder = wizardPanel.Controls[2];
-                wizardPanel.Controls.Remove(placeholder);
-                placeholder.Dispose();
-            }
-            wizardPanel.Controls.Add(contentPanel);
+            topPanel.Controls.Add(contentPanel);
 
-            // 同步过程中禁用下一步按钮
             btnNext.Enabled = false;
         }
 
@@ -2298,12 +1284,6 @@ namespace jtools_outlook
             btnNext.Enabled = (cmbSourceStore.SelectedItem != null && cmbTargetStore.SelectedItem != null);
         }
 
-        private void BtnPrevious_Click(object sender, EventArgs e)
-        {
-            if (currentStep == WizardStep.SelectFolders)
-                ShowStep(WizardStep.SelectDataFiles);
-        }
-
         private void BtnNext_Click(object sender, EventArgs e)
         {
             switch (currentStep)
@@ -2311,7 +1291,7 @@ namespace jtools_outlook
                 case WizardStep.SelectDataFiles:
                     StartAnalysis();
                     break;
-                case WizardStep.SelectFolders:
+                case WizardStep.Analyzing:
                     StartSync();
                     break;
             }
@@ -2321,148 +1301,31 @@ namespace jtools_outlook
         {
             try
             {
-                _sourceRoot = ((StoreInfo)cmbSourceStore.SelectedItem).Store.GetRootFolder();
-                _targetRoot = ((StoreInfo)cmbTargetStore.SelectedItem).Store.GetRootFolder();
+                _sourceStore = ((StoreInfo)cmbSourceStore.SelectedItem).Store;
+                _targetStore = ((StoreInfo)cmbTargetStore.SelectedItem).Store;
 
+                AddLog($"开始分析邮件数据...");
+                AddLog($"联机存档: {_sourceStore.DisplayName}");
+                AddLog($"本地PST: {_targetStore.DisplayName}");
+
+                // 切换到统计界面
                 ShowStep(WizardStep.Analyzing);
-                AddLog($"开始分析文件夹差异");
-                AddLog($"源数据文件: {_sourceRoot.Name}");
-                AddLog($"目标数据文件: {_targetRoot.Name}");
-                AddLog("");
-                AddLog("正在启动分析任务，请稍候...");
-                UpdateAnalyzeProgress(0, 100, 0, "正在初始化...");
+                btnNext.Enabled = false;
 
                 // 在后台线程执行分析
-                var analysisTask = System.Threading.Tasks.Task.Run(() =>
+                var stats = await System.Threading.Tasks.Task.Run(() =>
                 {
-                    var result = new List<FolderDiffInfo>();
-
-                    // 获取所有文件夹
-                    this.Invoke(new System.Action(() =>
-                    {
-                        AddLog("正在获取源数据文件文件夹列表...");
-                        UpdateAnalyzeProgress(0, 100, 5, "正在获取源数据文件文件夹列表...");
-                    }));
-
-                    var sourceFolders = GetAllFolders(_sourceRoot);
-                    this.Invoke(new System.Action(() =>
-                    {
-                        AddLog($"[源] 找到 {sourceFolders.Count} 个文件夹");
-                        AddLog("正在获取目标数据文件文件夹列表...");
-                        UpdateAnalyzeProgress(0, 100, 20, $"源数据文件: {sourceFolders.Count} 个文件夹");
-                    }));
-
-                    var targetFolders = GetAllFolders(_targetRoot);
-                    this.Invoke(new System.Action(() =>
-                    {
-                        AddLog($"[目标] 找到 {targetFolders.Count} 个文件夹");
-                        AddLog("正在构建文件夹索引...");
-                        UpdateAnalyzeProgress(0, 100, 40, $"目标数据文件: {targetFolders.Count} 个文件夹");
-                    }));
-
-                    // 构建目标文件夹字典
-                    var targetFolderDict = new Dictionary<string, Outlook.MAPIFolder>(System.StringComparer.OrdinalIgnoreCase);
-                    foreach (var folder in targetFolders)
-                    {
-                        string path = GetSimpleFolderPath(folder, _targetRoot);
-                        if (!string.IsNullOrEmpty(path))
-                            targetFolderDict[path] = folder;
-                    }
-
-                    this.Invoke(new System.Action(() =>
-                    {
-                        AddLog($"目标字典构建完成，包含 {targetFolderDict.Count} 个路径");
-                        AddLog("");
-                        AddLog("开始对比文件夹差异...");
-                        UpdateAnalyzeProgress(0, 100, 50, "正在对比文件夹差异...");
-                    }));
-
-                    // 对比文件夹
-                    int processedCount = 0;
-                    int totalFolders = sourceFolders.Count;
-                    int diffFound = 0;
-                    var diffLogs = new List<string>();
-
-                    foreach (var sourceFolder in sourceFolders)
-                    {
-                        processedCount++;
-                        string simplePath = GetSimpleFolderPath(sourceFolder, _sourceRoot);
-                        if (string.IsNullOrEmpty(simplePath))
-                            continue;
-
-                        // 在目标中查找匹配
-                        Outlook.MAPIFolder targetFolder = null;
-                        targetFolderDict.TryGetValue(simplePath, out targetFolder);
-
-                        // 获取邮件数量
-                        int sourceCount = GetMailItemCount(sourceFolder);
-                        int targetCount = targetFolder != null ? GetMailItemCount(targetFolder) : 0;
-
-                        // 如果源比目标多，记录差异
-                        if (sourceCount > targetCount)
-                        {
-                            diffFound++;
-                            result.Add(new FolderDiffInfo
-                            {
-                                FolderPath = simplePath,
-                                SourceFolder = sourceFolder,
-                                TargetFolder = targetFolder,
-                                SourceCount = sourceCount,
-                                TargetCount = targetCount,
-                                DiffCount = sourceCount - targetCount
-                            });
-
-                            diffLogs.Add($"  发现差异: {simplePath} (源:{sourceCount} 目标:{targetCount} 差:{sourceCount - targetCount})");
-                        }
-
-                        // 每5个文件夹更新一次进度和日志
-                        if (processedCount % 5 == 0 || processedCount == totalFolders)
-                        {
-                            int percent = 50 + (int)((double)processedCount / totalFolders * 50);
-                            var logsToOutput = new List<string>(diffLogs);
-                            diffLogs.Clear();
-
-                            this.Invoke(new System.Action(() =>
-                            {
-                                UpdateAnalyzeProgress(processedCount, totalFolders, percent, $"正在分析: {simplePath}");
-                                foreach (var log in logsToOutput)
-                                {
-                                    AddLog(log);
-                                }
-                            }));
-                        }
-                    }
-
-                    this.Invoke(new System.Action(() =>
-                    {
-                        // 输出剩余的日志
-                        foreach (var log in diffLogs)
-                        {
-                            AddLog(log);
-                        }
-                        AddLog($"对比完成，共检查 {processedCount} 个文件夹，发现 {diffFound} 个差异");
-                    }));
-
-                    return result;
+                    return AnalyzeYearlyStats(_sourceStore, _targetStore);
                 });
 
-                // 等待分析完成
-                _folderDiffs = await analysisTask;
+                _yearlyStats = stats;
 
-                AddLog("");
-                AddLog($"分析完成，发现 {_folderDiffs.Count} 个有差异的文件夹");
-
-                if (_folderDiffs.Count == 0)
+                // 显示统计结果
+                this.Invoke(new System.Action(() =>
                 {
-                    MessageBox.Show("没有发现需要同步的文件夹差异。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    ShowStep(WizardStep.SelectDataFiles);
-                }
-                else
-                {
-                    AddLog("正在切换到文件夹选择界面...");
-                    ShowStep(WizardStep.SelectFolders);
-                    AddLog("已切换到文件夹选择界面");
-                }
+                    DisplayYearlyStats();
+                    btnNext.Enabled = _yearlyStats.Any(s => s.OnlineInboxCount > 0 || s.OnlineSentCount > 0);
+                }));
             }
             catch (System.Exception ex)
             {
@@ -2472,505 +1335,837 @@ namespace jtools_outlook
             }
         }
 
-        private List<Outlook.MAPIFolder> GetAllFolders(Outlook.MAPIFolder rootFolder)
+        private List<YearlyStatsItem> AnalyzeYearlyStats(Outlook.Store onlineStore, Outlook.Store localStore)
         {
-            var result = new List<Outlook.MAPIFolder>();
-            GetFoldersRecursive(rootFolder, result);
+            var result = new List<YearlyStatsItem>();
+
+            try
+            {
+                // 更新标题显示数据文件名称
+                string onlineName = onlineStore?.DisplayName ?? "联机存档";
+                string localName = localStore?.DisplayName ?? "本地PST";
+                this.Invoke(new System.Action(() =>
+                {
+                    if (lblOnlineTitle != null)
+                        lblOnlineTitle.Text = $"【联机存档】{onlineName}";
+                    if (lblLocalTitle != null)
+                        lblLocalTitle.Text = $"【本地PST】{localName}";
+                }));
+
+                // 获取联机存档的收件箱和已发送文件夹
+                this.Invoke(new System.Action(() => AddLog("正在获取联机存档文件夹...")));
+                var onlineInbox = FindFolder(onlineStore, "收件箱", "Inbox");
+                var onlineSent = FindFolder(onlineStore, "已发送邮件", "Sent Items", "已发送");
+
+                // 获取本地PST的收件箱和已发送文件夹
+                this.Invoke(new System.Action(() => AddLog("正在获取本地PST文件夹...")));
+                var localInbox = FindFolder(localStore, "收件箱", "Inbox");
+                var localSent = FindFolder(localStore, "已发送邮件", "Sent Items", "已发送");
+
+                // 获取所有年份范围
+                this.Invoke(new System.Action(() => AddLog("正在确定年份范围...")));
+                var allYears = GetYearRange(onlineInbox, onlineSent, localInbox, localSent);
+                
+                if (allYears.Count == 0)
+                {
+                    this.Invoke(new System.Action(() => AddLog("未找到任何邮件")));
+                    return result;
+                }
+
+                this.Invoke(new System.Action(() => AddLog($"发现邮件年份范围: {allYears.Min()} - {allYears.Max()}，共 {allYears.Count} 个年份")));
+
+                // 按年份逐个统计
+                foreach (var year in allYears.OrderByDescending(y => y))
+                {
+                    this.Invoke(new System.Action(() => AddLog($"正在统计 {year} 年...")));
+
+                    int onlineInboxCount = onlineInbox != null ? CountMailsByYear(onlineInbox, year) : 0;
+                    int onlineSentCount = onlineSent != null ? CountMailsByYear(onlineSent, year) : 0;
+                    int localInboxCount = localInbox != null ? CountMailsByYear(localInbox, year) : 0;
+                    int localSentCount = localSent != null ? CountMailsByYear(localSent, year) : 0;
+
+                    var yearStats = new YearlyStatsItem
+                    {
+                        Year = year,
+                        OnlineInboxCount = onlineInboxCount,
+                        OnlineSentCount = onlineSentCount,
+                        LocalInboxCount = localInboxCount,
+                        LocalSentCount = localSentCount,
+                        OnlineStats = new YearlyMailStats
+                        {
+                            Year = year,
+                            InboxCount = onlineInboxCount,
+                            SentCount = onlineSentCount,
+                            InboxFolder = onlineInbox,
+                            SentFolder = onlineSent
+                        },
+                        LocalStats = new YearlyMailStats
+                        {
+                            Year = year,
+                            InboxCount = localInboxCount,
+                            SentCount = localSentCount,
+                            InboxFolder = localInbox,
+                            SentFolder = localSent
+                        }
+                    };
+
+                    result.Add(yearStats);
+
+                    // 每统计完一年，刷新UI显示
+                    this.Invoke(new System.Action(() =>
+                    {
+                        AddLog($"  {year}年: 联机收件箱 {onlineInboxCount}, 联机已发送 {onlineSentCount}, 本地收件箱 {localInboxCount}, 本地已发送 {localSentCount}");
+                        // 实时更新显示
+                        UpdateYearlyStatsDisplay(result);
+                    }));
+
+                    System.Threading.Thread.Sleep(500); // 暂停0.5秒让UI刷新
+                }
+
+                this.Invoke(new System.Action(() => AddLog($"分析完成，共 {result.Count} 个年份的数据")));
+            }
+            catch (System.Exception ex)
+            {
+                this.Invoke(new System.Action(() => AddLog($"分析出错: {ex.Message}")));
+            }
+
             return result;
         }
 
-        private void GetFoldersRecursive(Outlook.MAPIFolder folder, List<Outlook.MAPIFolder> folderList)
+        /// <summary>
+        /// 获取所有邮件的年份范围
+        /// </summary>
+        private HashSet<int> GetYearRange(params Outlook.MAPIFolder[] folders)
         {
-            folderList.Add(folder);
+            var years = new HashSet<int>();
 
-            try
+            foreach (var folder in folders)
             {
-                foreach (Outlook.MAPIFolder subFolder in folder.Folders)
+                if (folder == null) continue;
+
+                try
                 {
-                    GetFoldersRecursive(subFolder, folderList);
+                    var items = folder.Items;
+                    items.Sort("[ReceivedTime]", true);
+
+                    // 获取第一封邮件的年份（最新的）
+                    try
+                    {
+                        var firstItem = items.GetFirst();
+                        if (firstItem != null)
+                        {
+                            DateTime? firstTime = GetItemTime(firstItem);
+                            if (firstTime.HasValue)
+                                years.Add(firstTime.Value.Year);
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(firstItem);
+                        }
+                    }
+                    catch { }
+
+                    // 获取最后一封邮件的年份（最早的）
+                    try
+                    {
+                        var lastItem = items.GetLast();
+                        if (lastItem != null)
+                        {
+                            DateTime? lastTime = GetItemTime(lastItem);
+                            if (lastTime.HasValue)
+                                years.Add(lastTime.Value.Year);
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(lastItem);
+                        }
+                    }
+                    catch { }
+
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(items);
+                }
+                catch { }
+            }
+
+            // 补充中间的年份
+            if (years.Count > 0)
+            {
+                int minYear = years.Min();
+                int maxYear = years.Max();
+                years.Clear();
+                for (int y = minYear; y <= maxYear; y++)
+                {
+                    years.Add(y);
                 }
             }
-            catch
-            {
-                // 忽略无法访问的文件夹
-            }
+
+            return years;
         }
 
-        private string GetSimpleFolderPath(Outlook.MAPIFolder folder, Outlook.MAPIFolder rootFolder)
+        /// <summary>
+        /// 获取邮件项目的时间
+        /// </summary>
+        private DateTime? GetItemTime(object item)
         {
-            if (folder == null)
-                return null;
+            try
+            {
+                if (item is Outlook.MailItem mail)
+                {
+                    var time = mail.ReceivedTime;
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(mail);
+                    return time;
+                }
+                else if (item is Outlook.MeetingItem meeting)
+                {
+                    var time = meeting.ReceivedTime;
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(meeting);
+                    return time;
+                }
+                else if (item is Outlook.ReportItem report)
+                {
+                    var time = report.CreationTime;
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(report);
+                    return time;
+                }
+            }
+            catch { }
 
-            if (folder.EntryID == rootFolder.EntryID)
-                return "__ROOT__";
+            return null;
+        }
+
+        /// <summary>
+        /// 统计指定年份的邮件数量
+        /// </summary>
+        private int CountMailsByYear(Outlook.MAPIFolder folder, int year)
+        {
+            int count = 0;
 
             try
             {
-                var pathParts = new List<string>();
-                Outlook.MAPIFolder current = folder;
+                var items = folder.Items;
+                items.Sort("[ReceivedTime]", true);
 
-                while (current != null && current.EntryID != rootFolder.EntryID)
+                // 使用筛选获取指定年份的邮件
+                string filter = $"[ReceivedTime] >= '{year}/1/1' AND [ReceivedTime] < '{year + 1}/1/1'";
+                Outlook.Items filteredItems = null;
+
+                try
                 {
-                    pathParts.Insert(0, current.Name);
-                    current = current.Parent as Outlook.MAPIFolder;
+                    filteredItems = items.Restrict(filter);
+                    count = filteredItems.Count;
+                }
+                catch
+                {
+                    // 如果筛选失败，遍历计数
+                    foreach (object item in items)
+                    {
+                        try
+                        {
+                            DateTime? receivedTime = GetItemTime(item);
+                            if (receivedTime.HasValue && receivedTime.Value.Year == year)
+                            {
+                                count++;
+                            }
+                        }
+                        catch { }
+                        finally
+                        {
+                            if (item != null)
+                                System.Runtime.InteropServices.Marshal.ReleaseComObject(item);
+                        }
+                    }
                 }
 
-                return string.Join("\\", pathParts);
+                if (filteredItems != null)
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(filteredItems);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(items);
             }
-            catch
-            {
-                return folder.Name;
-            }
+            catch { }
+
+            return count;
         }
 
-        private int GetMailItemCount(Outlook.MAPIFolder folder)
+        /// <summary>
+        /// 实时更新统计显示
+        /// </summary>
+        private void UpdateYearlyStatsDisplay(List<YearlyStatsItem> currentStats)
+        {
+            if (lvOnlineStats == null || lvLocalStats == null) return;
+
+            lvOnlineStats.Items.Clear();
+            lvLocalStats.Items.Clear();
+
+            foreach (var stat in currentStats.OrderByDescending(s => s.Year))
+            {
+                // 左侧：联机数据（带复选框）
+                var onlineItem = new ListViewItem(stat.Year.ToString());
+                onlineItem.SubItems.Add(stat.OnlineInboxCount.ToString("N0"));
+                onlineItem.SubItems.Add(stat.OnlineSentCount.ToString("N0"));
+                onlineItem.SubItems.Add((stat.OnlineInboxCount + stat.OnlineSentCount).ToString("N0"));
+                onlineItem.Checked = stat.OnlineInboxCount > 0 || stat.OnlineSentCount > 0;
+                onlineItem.Tag = stat;
+                lvOnlineStats.Items.Add(onlineItem);
+
+                // 右侧：本地数据（不带复选框）
+                var localItem = new ListViewItem(stat.Year.ToString());
+                localItem.SubItems.Add(stat.LocalInboxCount.ToString("N0"));
+                localItem.SubItems.Add(stat.LocalSentCount.ToString("N0"));
+                localItem.SubItems.Add((stat.LocalInboxCount + stat.LocalSentCount).ToString("N0"));
+                lvLocalStats.Items.Add(localItem);
+            }
+
+            UpdateStatsSummary();
+        }
+
+        private Outlook.MAPIFolder FindFolder(Outlook.Store store, params string[] possibleNames)
         {
             try
             {
-                // 直接使用 Items.Count，速度快得多
-                // 注意：这包含所有项目（邮件、日历、联系人等）
-                // 但对于邮件文件夹，大部分都是邮件
-                return folder.Items.Count;
+                var root = store.GetRootFolder();
+                foreach (Outlook.MAPIFolder folder in root.Folders)
+                {
+                    foreach (var name in possibleNames)
+                    {
+                        if (folder.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return folder;
+                        }
+                    }
+                }
             }
-            catch
-            {
-                return 0;
-            }
+            catch { }
+            return null;
         }
 
-        private void LoadFolderDiffs()
+        private Dictionary<int, int> GetYearlyMailCount(Outlook.MAPIFolder folder)
         {
-            lvFolders.Items.Clear();
-            foreach (var diff in _folderDiffs)
+            var result = new Dictionary<int, int>();
+
+            try
             {
-                var item = new ListViewItem("");
-                item.SubItems.Add(diff.FolderPath);
-                item.SubItems.Add(diff.SourceCount.ToString("N0"));
-                item.SubItems.Add(diff.TargetCount.ToString("N0"));
-                item.SubItems.Add(diff.DiffCount.ToString("N0"));
-                item.Checked = true;
-                item.Tag = diff;
-                lvFolders.Items.Add(item);
+                var items = folder.Items;
+                items.Sort("[ReceivedTime]", true);
+
+                foreach (object item in items)
+                {
+                    try
+                    {
+                        DateTime? receivedTime = null;
+
+                        if (item is Outlook.MailItem mail)
+                        {
+                            receivedTime = mail.ReceivedTime;
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(mail);
+                        }
+                        else if (item is Outlook.MeetingItem meeting)
+                        {
+                            receivedTime = meeting.ReceivedTime;
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(meeting);
+                        }
+                        else if (item is Outlook.ReportItem report)
+                        {
+                            receivedTime = report.CreationTime;
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(report);
+                        }
+
+                        if (receivedTime.HasValue)
+                        {
+                            int year = receivedTime.Value.Year;
+                            if (!result.ContainsKey(year))
+                                result[year] = 0;
+                            result[year]++;
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        if (item != null)
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(item);
+                    }
+                }
+
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(items);
             }
-            UpdateFolderStats();
-            btnNext.Enabled = (_folderDiffs.Count > 0);
+            catch { }
+
+            return result;
         }
 
-        private void UpdateFolderStats()
+        private void LoadYearlyStats()
         {
-            int selectedCount = lvFolders.Items.Cast<ListViewItem>().Count(i => i.Checked);
-            int totalEmails = lvFolders.Items.Cast<ListViewItem>()
+            // 数据已在 StartAnalysis 中加载
+            DisplayYearlyStats();
+        }
+
+        private void DisplayYearlyStats()
+        {
+            lvOnlineStats.Items.Clear();
+            lvLocalStats.Items.Clear();
+
+            foreach (var stat in _yearlyStats)
+            {
+                // 左侧：联机数据（带复选框）
+                var onlineItem = new ListViewItem(stat.Year.ToString());
+                onlineItem.SubItems.Add(stat.OnlineInboxCount.ToString("N0"));
+                onlineItem.SubItems.Add(stat.OnlineSentCount.ToString("N0"));
+                onlineItem.SubItems.Add((stat.OnlineInboxCount + stat.OnlineSentCount).ToString("N0"));
+                onlineItem.Checked = stat.OnlineInboxCount > 0 || stat.OnlineSentCount > 0;
+                onlineItem.Tag = stat;
+                lvOnlineStats.Items.Add(onlineItem);
+
+                // 右侧：本地数据（不带复选框）
+                var localItem = new ListViewItem(stat.Year.ToString());
+                localItem.SubItems.Add(stat.LocalInboxCount.ToString("N0"));
+                localItem.SubItems.Add(stat.LocalSentCount.ToString("N0"));
+                localItem.SubItems.Add((stat.LocalInboxCount + stat.LocalSentCount).ToString("N0"));
+                lvLocalStats.Items.Add(localItem);
+            }
+
+            UpdateStatsSummary();
+        }
+
+        private void UpdateStatsSummary()
+        {
+            var selectedItems = lvOnlineStats.Items.Cast<ListViewItem>()
                 .Where(i => i.Checked)
-                .Sum(i => ((FolderDiffInfo)i.Tag).DiffCount);
+                .Select(i => (YearlyStatsItem)i.Tag)
+                .ToList();
 
-            lblFolderStats.Text = $"已选择 {selectedCount} 个文件夹，共 {totalEmails} 封邮件待同步";
-            btnNext.Enabled = (selectedCount > 0);
+            int totalInbox = selectedItems.Sum(s => s.OnlineInboxCount);
+            int totalSent = selectedItems.Sum(s => s.OnlineSentCount);
+            int total = totalInbox + totalSent;
+
+            lblStatsSummary.Text = $"已选择 {selectedItems.Count} 个年份，共 {total:N0} 封邮件待下载（收件箱: {totalInbox:N0}，已发送: {totalSent:N0}）";
+            btnNext.Enabled = selectedItems.Count > 0;
+        }
+
+        // 同步参数类
+        private class SyncArguments
+        {
+            public string OnlineStoreId { get; set; }
+            public string LocalStoreId { get; set; }
+            public List<SyncYearItem> Years { get; set; }
+        }
+
+        private class SyncYearItem
+        {
+            public int Year { get; set; }
+            public int OnlineInboxCount { get; set; }
+            public int OnlineSentCount { get; set; }
+        }
+
+        // 同步结果类
+        private class SyncResult
+        {
+            public int TotalEmails { get; set; }
+            public int SyncedEmails { get; set; }
+            public bool Cancelled { get; set; }
+            public string ErrorMessage { get; set; }
+        }
+
+        // 进度报告类
+        private class SyncProgressReport
+        {
+            public int SyncedCount { get; set; }
+            public int TotalCount { get; set; }
+            public string Status { get; set; }
+            public string LogMessage { get; set; }
         }
 
         private void StartSync()
         {
-            _selectedFolders.Clear();
-            foreach (ListViewItem item in lvFolders.Items)
+            _selectedYears.Clear();
+            foreach (ListViewItem item in lvOnlineStats.Items)
             {
                 if (item.Checked)
-                    _selectedFolders.Add((FolderDiffInfo)item.Tag);
+                    _selectedYears.Add((YearlyStatsItem)item.Tag);
             }
 
             ShowStep(WizardStep.Syncing);
-            AddLog($"开始同步 {_selectedFolders.Count} 个文件夹");
+            AddLog($"开始下载 {_selectedYears.Count} 个年份的邮件");
 
-            // 启动异步同步任务
-            System.Threading.Tasks.Task.Run(() => PerformSync());
+            // 准备同步参数
+            var args = new SyncArguments
+            {
+                OnlineStoreId = _sourceStore?.StoreID,
+                LocalStoreId = _targetStore?.StoreID,
+                Years = _selectedYears.Select(y => new SyncYearItem
+                {
+                    Year = y.Year,
+                    OnlineInboxCount = y.OnlineInboxCount,
+                    OnlineSentCount = y.OnlineSentCount
+                }).ToList()
+            };
+
+            // 创建并配置 BackgroundWorker
+            _syncWorker = new System.ComponentModel.BackgroundWorker();
+            _syncWorker.WorkerReportsProgress = true;
+            _syncWorker.WorkerSupportsCancellation = true;
+
+            _syncWorker.DoWork += SyncWorker_DoWork;
+            _syncWorker.ProgressChanged += SyncWorker_ProgressChanged;
+            _syncWorker.RunWorkerCompleted += SyncWorker_RunWorkerCompleted;
+
+            // 启动后台任务
+            _syncWorker.RunWorkerAsync(args);
         }
 
-        private async void PerformSync()
+        // 后台工作线程 - 所有COM操作在这里执行
+        private void SyncWorker_DoWork(object sender, System.ComponentModel.DoWorkEventArgs e)
         {
+            var args = (SyncArguments)e.Argument;
+            var worker = (System.ComponentModel.BackgroundWorker)sender;
+
+            int totalEmails = args.Years.Sum(y => y.OnlineInboxCount + y.OnlineSentCount);
+            int syncedEmails = 0;
+            int currentYearIndex = 0;
+
+            // 报告开始
+            worker.ReportProgress(0, new SyncProgressReport
+            {
+                LogMessage = $"总共需要下载 {totalEmails} 封邮件"
+            });
+
             try
             {
-                int totalFolders = _selectedFolders.Count;
-                int currentFolder = 0;
-                int totalEmails = _selectedFolders.Sum(f => f.DiffCount);
-                int syncedEmails = 0;
-                var syncStats = new List<FolderSyncStat>();  // 记录每个文件夹的同步统计
+                // 获取Store对象
+                Outlook.Store onlineStore = null;
+                Outlook.Store localStore = null;
 
-                AddLog($"总共需要同步 {totalEmails} 封邮件");
-
-                foreach (var folderDiff in _selectedFolders)
+                foreach (Outlook.Store store in _application.Session.Stores)
                 {
-                    if (IsCancelled)
-                        break;
-
-                    currentFolder++;
-                    var folderStat = new FolderSyncStat
+                    try
                     {
-                        FolderPath = folderDiff.FolderPath,
-                        TotalEmails = folderDiff.DiffCount,
-                        SyncedEmails = 0
-                    };
-
-                    this.Invoke(new System.Action(() =>
-                    {
-                        AddLog($"[{currentFolder}/{totalFolders}] 正在同步: {folderDiff.FolderPath}");
-                        UpdateSyncProgress(currentFolder, totalFolders, syncedEmails, totalEmails, $"正在同步: {folderDiff.FolderPath}");
-                    }));
-
-                    // 同步单个文件夹
-                    int synced = await SyncFolderAsync(folderDiff, syncedEmails, totalEmails);
-                    syncedEmails += synced;
-                    folderStat.SyncedEmails = synced;
-                    syncStats.Add(folderStat);
-
-                    this.Invoke(new System.Action(() =>
-                    {
-                        AddLog($"  已同步 {synced} 封邮件");
-                    }));
+                        if (store.StoreID == args.OnlineStoreId)
+                            onlineStore = store;
+                        if (store.StoreID == args.LocalStoreId)
+                            localStore = store;
+                    }
+                    catch { }
                 }
 
-                this.Invoke(new System.Action(() =>
+                if (onlineStore == null)
                 {
-                    if (IsCancelled)
-                    {
-                        // 显示详细的取消统计信息
-                        AddLog("");
-                        AddLog("=== 同步已取消 ===");
-                        AddLog($"已同步: {syncedEmails} 封邮件");
-                        AddLog($"未同步: {totalEmails - syncedEmails} 封邮件");
-                        AddLog("");
-                        AddLog("已同步的文件夹:");
+                    e.Result = new SyncResult { ErrorMessage = "无法找到联机存档数据文件" };
+                    return;
+                }
 
-                        foreach (var stat in syncStats)
+                // 获取文件夹
+                Outlook.MAPIFolder onlineInbox = FindFolder(onlineStore, "收件箱", "Inbox");
+                Outlook.MAPIFolder onlineSent = FindFolder(onlineStore, "已发送邮件", "Sent Items", "已发送");
+                Outlook.MAPIFolder localInbox = localStore != null ? FindFolder(localStore, "收件箱", "Inbox") : null;
+                Outlook.MAPIFolder localSent = localStore != null ? FindFolder(localStore, "已发送邮件", "Sent Items", "已发送") : null;
+
+                try
+                {
+                    foreach (var yearItem in args.Years)
+                    {
+                        if (worker.CancellationPending)
                         {
-                            if (stat.SyncedEmails > 0)
-                            {
-                                AddLog($"  ✓ {stat.FolderPath}: {stat.SyncedEmails}/{stat.TotalEmails} 封");
-                            }
+                            e.Cancel = true;
+                            break;
                         }
 
-                        // 显示未同步的文件夹
-                        var unsyncedFolders = _selectedFolders.Where(f => !syncStats.Any(s => s.FolderPath == f.FolderPath && s.SyncedEmails > 0)).ToList();
-                        if (unsyncedFolders.Count > 0)
-                        {
-                            AddLog("");
-                            AddLog("未同步的文件夹:");
-                            foreach (var folder in unsyncedFolders)
+                        currentYearIndex++;
+
+                        worker.ReportProgress(
+                            totalEmails > 0 ? (int)((double)syncedEmails / totalEmails * 100) : 0,
+                            new SyncProgressReport
                             {
-                                AddLog($"  ✗ {folder.FolderPath}: 0/{folder.DiffCount} 封");
-                            }
+                                SyncedCount = syncedEmails,
+                                TotalCount = totalEmails,
+                                Status = $"正在下载 {yearItem.Year} 年的邮件...",
+                                LogMessage = $"[{currentYearIndex}/{args.Years.Count}] 正在下载 {yearItem.Year} 年的邮件..."
+                            });
+
+                        // 下载收件箱邮件
+                        if (onlineInbox != null && yearItem.OnlineInboxCount > 0)
+                        {
+                            int inboxSynced = SyncFolderByYear(worker, onlineInbox, localInbox, yearItem.Year, syncedEmails, totalEmails, "收件箱");
+                            syncedEmails += inboxSynced;
+
+                            worker.ReportProgress(
+                                totalEmails > 0 ? (int)((double)syncedEmails / totalEmails * 100) : 0,
+                                new SyncProgressReport
+                                {
+                                    LogMessage = $"  收件箱: 已下载 {inboxSynced} 封邮件"
+                                });
                         }
 
-                        // 显示提示框
-                        MessageBox.Show(
-                            $"同步已取消\n\n" +
-                            $"已同步: {syncedEmails} 封邮件\n" +
-                            $"未同步: {totalEmails - syncedEmails} 封邮件\n\n" +
-                            $"已同步的邮件已保留在目标文件夹中。",
-                            "同步已取消",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-                    }
-                    else
-                    {
-                        AddLog($"同步完成，共同步 {syncedEmails} 封邮件");
-                        UpdateSyncProgress(totalFolders, totalFolders, totalEmails, totalEmails, "同步完成");
-                    }
+                        // 下载已发送邮件
+                        if (onlineSent != null && yearItem.OnlineSentCount > 0)
+                        {
+                            int sentSynced = SyncFolderByYear(worker, onlineSent, localSent, yearItem.Year, syncedEmails, totalEmails, "已发送");
+                            syncedEmails += sentSynced;
 
-                    // 更新按钮状态
-                    btnNext.Text = "完成";
-                    btnNext.Enabled = true;
-                    btnNext.Click -= BtnNext_Click;
-                    btnNext.Click += (s, e) => this.Close();
-                }));
+                            worker.ReportProgress(
+                                totalEmails > 0 ? (int)((double)syncedEmails / totalEmails * 100) : 0,
+                                new SyncProgressReport
+                                {
+                                    LogMessage = $"  已发送: 已下载 {sentSynced} 封邮件"
+                                });
+                        }
+                    }
+                }
+                finally
+                {
+                    // 释放COM对象
+                    if (onlineInbox != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(onlineInbox);
+                    if (onlineSent != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(onlineSent);
+                    if (localInbox != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(localInbox);
+                    if (localSent != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(localSent);
+                    if (onlineStore != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(onlineStore);
+                    if (localStore != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(localStore);
+                }
+
+                e.Result = new SyncResult
+                {
+                    TotalEmails = totalEmails,
+                    SyncedEmails = syncedEmails,
+                    Cancelled = e.Cancel
+                };
             }
             catch (System.Exception ex)
             {
-                this.Invoke(new System.Action(() =>
+                e.Result = new SyncResult
                 {
-                    AddLog($"✗ 同步失败: {ex.Message}");
-                    MessageBox.Show($"同步失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }));
+                    TotalEmails = totalEmails,
+                    SyncedEmails = syncedEmails,
+                    ErrorMessage = ex.Message
+                };
             }
         }
 
-        // 文件夹同步统计类
-        private class FolderSyncStat
+        // 进度更新 - 在UI线程执行
+        private void SyncWorker_ProgressChanged(object sender, System.ComponentModel.ProgressChangedEventArgs e)
         {
-            public string FolderPath { get; set; }
-            public int TotalEmails { get; set; }
-            public int SyncedEmails { get; set; }
+            var report = (SyncProgressReport)e.UserState;
+
+            if (!string.IsNullOrEmpty(report.LogMessage))
+                AddLog(report.LogMessage);
+
+            if (!string.IsNullOrEmpty(report.Status))
+                UpdateSyncProgress(report.SyncedCount, report.TotalCount, report.Status);
         }
 
-        private async System.Threading.Tasks.Task<int> SyncFolderAsync(FolderDiffInfo folderDiff, int alreadySynced, int totalEmails)
+        // 任务完成 - 在UI线程执行
+        private void SyncWorker_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
         {
-            return await System.Threading.Tasks.Task.Run(() =>
+            var result = (SyncResult)e.Result;
+
+            if (result.Cancelled || _isCancelled)
             {
-                try
-                {
-                    int syncedCount = 0;
-                    var sourceFolder = folderDiff.SourceFolder;
-                    var targetFolder = folderDiff.TargetFolder;
+                AddLog("");
+                AddLog("=== 下载已取消 ===");
+                AddLog($"已下载: {result.SyncedEmails} 封邮件");
+                AddLog($"未下载: {result.TotalEmails - result.SyncedEmails} 封邮件");
 
-                    // 如果目标文件夹不存在，创建它
-                    if (targetFolder == null)
-                    {
-                        this.Invoke(new System.Action(() =>
-                        {
-                            AddLog($"  目标文件夹不存在，需要创建: {folderDiff.FolderPath}");
-                        }));
-                        return 0;
-                    }
+                MessageBox.Show(
+                    $"下载已取消\n\n已下载: {result.SyncedEmails} 封邮件\n未下载: {result.TotalEmails - result.SyncedEmails} 封邮件",
+                    "下载已取消",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            else if (!string.IsNullOrEmpty(result.ErrorMessage))
+            {
+                AddLog($"✗ 下载失败: {result.ErrorMessage}");
+                MessageBox.Show($"下载失败: {result.ErrorMessage}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            else
+            {
+                AddLog($"下载完成，共下载 {result.SyncedEmails} 封邮件");
+                UpdateSyncProgress(result.TotalEmails, result.TotalEmails, "下载完成");
+            }
 
-                    // 使用已知的差异数作为目标
-                    int targetCount = folderDiff.DiffCount;
-                    int totalSourceCount = folderDiff.SourceCount;  // 总邮件数
+            btnNext.Text = "完成";
+            btnNext.Enabled = true;
+            btnNext.Click -= BtnNext_Click;
+            btnNext.Click += (s, ev) => this.Close();
+            btnCancel.Enabled = true;
+            btnCancel.Text = "取消";
 
-                    // 先添加一行占位符，后续更新这一行
-                    this.Invoke(new System.Action(() =>
-                    {
-                        AddLog($"  开始逐封检查并同步，共需对比 {totalSourceCount} 封邮件，目标同步 {targetCount} 封邮件...");
-                        AddLog($"  对比进度: 0/{totalSourceCount} - 已同步: 0/{targetCount}");  // 占位符行
-                    }));
-
-                    // 使用 Items 集合的 GetFirst/GetNext 方法
-                    var sourceItems = sourceFolder.Items;
-                    var targetItems = targetFolder.Items;
-
-                    int current = 0;
-                    int lastProgressUpdate = 0;
-                    object sourceItem = null;
-
-                    try
-                    {
-                        sourceItem = sourceItems.GetFirst();
-
-                        while (sourceItem != null && syncedCount < targetCount)
-                        {
-                            if (IsCancelled)
-                            {
-                                this.Invoke(new System.Action(() =>
-                                {
-                                    // 更新进度行
-                                    UpdateProgressLine(current, totalSourceCount, syncedCount, targetCount);
-                                    AddLog($"  用户取消，已同步 {syncedCount}/{targetCount} 封邮件");
-                                }));
-                                break;
-                            }
-
-                            current++;
-
-                            // 每10封邮件更新一次进度行（避免UI卡顿）
-                            if (current % 10 == 0)
-                            {
-                                this.Invoke(new System.Action(() =>
-                                {
-                                    UpdateProgressLine(current, totalSourceCount, syncedCount, targetCount);
-                                }));
-                            }
-
-                            // 每100封邮件更新一次进度条
-                            if (current - lastProgressUpdate >= 100)
-                            {
-                                lastProgressUpdate = current;
-                                int totalSynced = alreadySynced + syncedCount;
-                                this.Invoke(new System.Action(() =>
-                                {
-                                    UpdateSyncProgress(0, 0, totalSynced, totalEmails, $"正在检查: {folderDiff.FolderPath} ({current}/{totalSourceCount})");
-                                }));
-                            }
-
-                            if (sourceItem is Outlook.MailItem sourceMail)
-                            {
-                                bool shouldSync = false;
-
-                                try
-                                {
-                                    // 使用邮件的 EntryID 和主题作为唯一标识
-                                    string subject = sourceMail.Subject ?? "";
-                                    DateTime receivedTime = sourceMail.ReceivedTime;
-
-                                    // 检查目标文件夹中是否存在相同主题和接收时间的邮件
-                                    bool exists = false;
-
-                                    try
-                                    {
-                                        // 使用过滤器查找相同主题的邮件
-                                        var filter = $"[Subject] = '{subject.Replace("'", "''")}'";
-                                        var filteredItems = targetItems.Restrict(filter);
-
-                                        if (filteredItems.Count > 0)
-                                        {
-                                            // 检查接收时间是否匹配
-                                            object filteredItem = filteredItems.GetFirst();
-                                            while (filteredItem != null)
-                                            {
-                                                if (filteredItem is Outlook.MailItem targetMail)
-                                                {
-                                                    try
-                                                    {
-                                                        if (Math.Abs((targetMail.ReceivedTime - receivedTime).TotalSeconds) < 2)
-                                                        {
-                                                            exists = true;
-                                                            System.Runtime.InteropServices.Marshal.ReleaseComObject(targetMail);
-                                                            break;
-                                                        }
-                                                    }
-                                                    finally
-                                                    {
-                                                        System.Runtime.InteropServices.Marshal.ReleaseComObject(targetMail);
-                                                    }
-                                                }
-
-                                                var nextFiltered = filteredItems.GetNext();
-                                                System.Runtime.InteropServices.Marshal.ReleaseComObject(filteredItem);
-                                                filteredItem = nextFiltered;
-                                            }
-                                        }
-
-                                        System.Runtime.InteropServices.Marshal.ReleaseComObject(filteredItems);
-                                    }
-                                    catch
-                                    {
-                                        // 如果过滤失败，假设不存在
-                                        exists = false;
-                                    }
-
-                                    shouldSync = !exists;
-
-                                    if (shouldSync)
-                                    {
-                                        // 复制邮件到目标文件夹
-                                        var copiedMail = sourceMail.Copy();
-                                        copiedMail.Move(targetFolder);
-
-                                        // 释放复制的邮件对象
-                                        System.Runtime.InteropServices.Marshal.ReleaseComObject(copiedMail);
-
-                                        syncedCount++;
-
-                                        // 每10封邮件更新一次进度
-                                        if (syncedCount % 10 == 0)
-                                        {
-                                            int totalSynced = alreadySynced + syncedCount;
-                                            this.Invoke(new System.Action(() =>
-                                            {
-                                                UpdateSyncProgress(0, 0, totalSynced, totalEmails, $"正在同步: {folderDiff.FolderPath} (已同步 {syncedCount}/{targetCount})");
-                                            }));
-                                        }
-                                    }
-                                }
-                                catch (System.Exception ex)
-                                {
-                                    // 忽略单个邮件的处理错误
-                                    if (syncedCount % 100 == 0)
-                                    {
-                                        this.Invoke(new System.Action(() =>
-                                        {
-                                            AddLog($"  警告: 部分邮件处理失败: {ex.Message}");
-                                        }));
-                                    }
-                                }
-                                finally
-                                {
-                                    // 释放源邮件 COM 对象
-                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceMail);
-                                }
-                            }
-
-                            // 获取下一封邮件
-                            var nextItem = sourceItems.GetNext();
-
-                            // 释放当前项
-                            if (sourceItem != null)
-                            {
-                                System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceItem);
-                            }
-
-                            sourceItem = nextItem;
-                        }
-                    }
-                    finally
-                    {
-                        // 释放最后的项
-                        if (sourceItem != null)
-                        {
-                            System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceItem);
-                        }
-
-                        // 释放 items 集合
-                        System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceItems);
-                        System.Runtime.InteropServices.Marshal.ReleaseComObject(targetItems);
-                    }
-
-                    return syncedCount;
-                }
-                catch (System.Exception ex)
-                {
-                    this.Invoke(new System.Action(() =>
-                    {
-                        AddLog($"  错误: 同步文件夹失败: {ex.Message}");
-                    }));
-                    return 0;
-                }
-            });
+            // 清理 BackgroundWorker
+            if (_syncWorker != null)
+            {
+                _syncWorker.Dispose();
+                _syncWorker = null;
+            }
         }
 
-        private void UpdateSyncProgress(int currentFolder, int totalFolders, int currentEmail, int totalEmails, string status)
+        // 同步文件夹 - 在后台线程执行
+        private int SyncFolderByYear(System.ComponentModel.BackgroundWorker worker, Outlook.MAPIFolder sourceFolder, Outlook.MAPIFolder targetFolder, int year, int alreadySynced, int totalEmails, string folderType)
         {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<int, int, int, int, string>(UpdateSyncProgress), currentFolder, totalFolders, currentEmail, totalEmails, status);
-                return;
-            }
-
-            // 使用邮件进度而不是文件夹进度
-            if (totalEmails > 0)
-            {
-                int emailPercent = (int)((double)currentEmail / totalEmails * 100);
-                progressSync.Value = emailPercent;
-            }
-            else if (totalFolders > 0)
-            {
-                // 如果没有邮件进度，使用文件夹进度
-                int folderPercent = (int)((double)currentFolder / totalFolders * 100);
-                progressSync.Value = folderPercent;
-            }
-
-            lblSyncStatus.Text = status;
-        }
-
-        private void UpdateProgressLine(int current, int total, int synced, int target)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<int, int, int, int>(UpdateProgressLine), current, total, synced, target);
-                return;
-            }
+            int syncedCount = 0;
+            int processedCount = 0;
+            int lastReportedPercent = 0;
 
             try
             {
-                // 更新最后一行日志（进度行）
-                if (txtLog.Lines.Length > 0)
+                var sourceItems = sourceFolder.Items;
+                sourceItems.Sort("[ReceivedTime]", true);
+
+                var filter = $"[ReceivedTime] >= '{year}/1/1' AND [ReceivedTime] < '{year + 1}/1/1'";
+                Outlook.Items filteredItems = null;
+
+                try
                 {
-                    string progressText = $"  对比进度: {current}/{total} - 已同步: {synced}/{target}";
+                    filteredItems = sourceItems.Restrict(filter);
+                }
+                catch
+                {
+                    filteredItems = sourceItems;
+                }
 
-                    // 使用更高效的方式更新最后一行
-                    int lastLineIndex = txtLog.GetFirstCharIndexFromLine(txtLog.Lines.Length - 1);
-                    if (lastLineIndex >= 0)
+                int total = filteredItems.Count;
+                object sourceItem = null;
+
+                try
+                {
+                    sourceItem = filteredItems.GetFirst();
+
+                    while (sourceItem != null)
                     {
-                        txtLog.SelectionStart = lastLineIndex;
-                        txtLog.SelectionLength = txtLog.Text.Length - lastLineIndex;
-                        txtLog.SelectedText = progressText;
-                    }
+                        if (worker.CancellationPending)
+                            break;
 
-                    // 滚动到底部
-                    txtLog.SelectionStart = txtLog.Text.Length;
-                    txtLog.SelectionLength = 0;
-                    txtLog.ScrollToCaret();
+                        processedCount++;
+
+                        // 更新进度（减少频率）
+                        int currentProgress = alreadySynced + syncedCount;
+                        int percent = totalEmails > 0 ? (int)((double)currentProgress / totalEmails * 100) : 0;
+
+                        if (percent > lastReportedPercent || processedCount % 20 == 0)
+                        {
+                            lastReportedPercent = percent;
+                            worker.ReportProgress(percent, new SyncProgressReport
+                            {
+                                SyncedCount = currentProgress,
+                                TotalCount = totalEmails,
+                                Status = $"正在下载 {year} 年{folderType}邮件 ({processedCount}/{total})"
+                            });
+                        }
+
+                        // 定期让出线程
+                        if (processedCount % 10 == 0)
+                        {
+                            System.Threading.Thread.Sleep(5);
+                        }
+
+                        if (sourceItem is Outlook.MailItem sourceMail)
+                        {
+                            try
+                            {
+                                if (worker.CancellationPending)
+                                    break;
+
+                                DateTime receivedTime = sourceMail.ReceivedTime;
+
+                                if (receivedTime.Year == year)
+                                {
+                                    bool exists = false;
+
+                                    if (targetFolder != null)
+                                    {
+                                        try
+                                        {
+                                            if (worker.CancellationPending)
+                                                break;
+
+                                            var targetItems = targetFolder.Items;
+                                            string subject = sourceMail.Subject ?? "";
+                                            var checkFilter = $"[Subject] = '{subject.Replace("'", "''")}'";
+                                            var checkItems = targetItems.Restrict(checkFilter);
+
+                                            if (checkItems.Count > 0)
+                                            {
+                                                object checkItem = checkItems.GetFirst();
+                                                while (checkItem != null)
+                                                {
+                                                    if (worker.CancellationPending)
+                                                    {
+                                                        System.Runtime.InteropServices.Marshal.ReleaseComObject(checkItem);
+                                                        break;
+                                                    }
+
+                                                    if (checkItem is Outlook.MailItem targetMail)
+                                                    {
+                                                        try
+                                                        {
+                                                            if (Math.Abs((targetMail.ReceivedTime - receivedTime).TotalSeconds) < 2)
+                                                            {
+                                                                exists = true;
+                                                                System.Runtime.InteropServices.Marshal.ReleaseComObject(targetMail);
+                                                                break;
+                                                            }
+                                                        }
+                                                        finally
+                                                        {
+                                                            System.Runtime.InteropServices.Marshal.ReleaseComObject(targetMail);
+                                                        }
+                                                    }
+
+                                                    var nextCheck = checkItems.GetNext();
+                                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(checkItem);
+                                                    checkItem = nextCheck;
+                                                }
+                                            }
+
+                                            System.Runtime.InteropServices.Marshal.ReleaseComObject(checkItems);
+                                            System.Runtime.InteropServices.Marshal.ReleaseComObject(targetItems);
+                                        }
+                                        catch { }
+                                    }
+
+                                    if (worker.CancellationPending)
+                                        break;
+
+                                    if (!exists)
+                                    {
+                                        var copiedMail = sourceMail.Copy();
+                                        if (targetFolder != null)
+                                        {
+                                            copiedMail.Move(targetFolder);
+                                        }
+                                        System.Runtime.InteropServices.Marshal.ReleaseComObject(copiedMail);
+                                        syncedCount++;
+                                    }
+                                }
+                            }
+                            catch { }
+                            finally
+                            {
+                                System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceMail);
+                            }
+                        }
+
+                        var nextItem = filteredItems.GetNext();
+                        if (sourceItem != null)
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceItem);
+                        sourceItem = nextItem;
+                    }
+                }
+                finally
+                {
+                    if (sourceItem != null)
+                        System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceItem);
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(filteredItems);
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(sourceItems);
                 }
             }
-            catch
+            catch { }
+
+            return syncedCount;
+        }
+
+        private void UpdateSyncProgress(int current, int total, string status)
+        {
+            if (this.InvokeRequired)
             {
-                // 忽略更新错误
+                this.Invoke(new System.Action<int, int, string>(UpdateSyncProgress), current, total, status);
+                return;
             }
+
+            if (total > 0)
+            {
+                int percent = (int)((double)current / total * 100);
+                progressSync.Value = Math.Min(percent, 100);
+            }
+
+            lblSyncStatus.Text = status;
         }
 
         public void AddLog(string message)
@@ -2994,40 +2189,10 @@ namespace jtools_outlook
                 txtLog.Lines = newLines;
             }
 
-            // 确保滚动到最后一行
             txtLog.SelectionStart = txtLog.Text.Length;
             txtLog.SelectionLength = 0;
             txtLog.ScrollToCaret();
-
-            // 强制刷新显示
             txtLog.Refresh();
-
-            // 使用 Windows API 确保滚动到底部
-            System.Windows.Forms.Application.DoEvents();
-        }
-
-        public void UpdateAnalyzeProgress(int current, int total, int percent, string status)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<int, int, int, string>(UpdateAnalyzeProgress), current, total, percent, status);
-                return;
-            }
-
-            progressAnalyze.Value = Math.Min(percent, 100);
-            lblAnalyzeStatus.Text = status;
-        }
-
-        public void UpdateSyncProgress(int current, int total, int percent, string status)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new System.Action<int, int, int, string>(UpdateSyncProgress), current, total, percent, status);
-                return;
-            }
-
-            progressSync.Value = Math.Min(percent, 100);
-            lblSyncStatus.Text = status;
         }
     }
 
@@ -3072,88 +2237,82 @@ namespace jtools_outlook
         private void InitializeComponents()
         {
             // 标题标签
-            var lblTitle = new Label
+            Label lblTitle = new Label
             {
                 Text = $"阻止域: *@{domain}",
-                Dock = DockStyle.Top,
-                Height = 40,
-                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Font = new System.Drawing.Font("Microsoft Sans Serif", 14, System.Drawing.FontStyle.Bold),
-                ForeColor = System.Drawing.Color.SteelBlue
+                Font = new Font("Microsoft YaHei", 12, FontStyle.Bold),
+                AutoSize = true,
+                Location = new Point(20, 20)
             };
+            this.Controls.Add(lblTitle);
+
+            // 说明标签
+            Label lblDesc = new Label
+            {
+                Text = "此操作将把该域添加到 Outlook 的阻止发件人列表中。",
+                AutoSize = true,
+                Location = new Point(20, 50)
+            };
+            this.Controls.Add(lblDesc);
 
             // 日志文本框
             txtLog = new TextBox
             {
-                Dock = DockStyle.Fill,
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
                 ReadOnly = true,
-                Font = new System.Drawing.Font("Consolas", 10),
-                BackColor = System.Drawing.Color.White
+                Width = 600,
+                Height = 300,
+                Location = new Point(20, 80),
+                Font = new Font("Consolas", 10)
             };
+            this.Controls.Add(txtLog);
 
-            // 按钮面板
-            var panelButtons = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 60
-            };
-
-            // 确认执行按钮
+            // 确认按钮
             btnConfirm = new Button
             {
                 Text = "确认执行",
-                Width = 120,
-                Height = 35,
-                Left = 90,
-                Top = 12
+                Width = 100,
+                Height = 30,
+                Location = new Point(150, 400)
             };
             btnConfirm.Click += BtnConfirm_Click;
+            this.Controls.Add(btnConfirm);
 
             // 取消按钮
             btnCancel = new Button
             {
                 Text = "取消",
-                Width = 120,
-                Height = 35,
-                Left = 230,
-                Top = 12
+                Width = 100,
+                Height = 30,
+                Location = new Point(270, 400)
             };
             btnCancel.Click += BtnCancel_Click;
+            this.Controls.Add(btnCancel);
 
             // 复制日志按钮
             btnCopy = new Button
             {
                 Text = "复制日志",
-                Width = 120,
-                Height = 35,
-                Left = 90,
-                Top = 12,
+                Width = 100,
+                Height = 30,
+                Location = new Point(390, 400),
                 Visible = false
             };
             btnCopy.Click += BtnCopy_Click;
+            this.Controls.Add(btnCopy);
 
             // 关闭按钮
             btnClose = new Button
             {
                 Text = "关闭",
-                Width = 120,
-                Height = 35,
-                Left = 370,
-                Top = 12,
+                Width = 100,
+                Height = 30,
+                Location = new Point(390, 400),
                 Visible = false
             };
-            btnClose.Click += BtnClose_Click;
-
-            panelButtons.Controls.Add(btnConfirm);
-            panelButtons.Controls.Add(btnCancel);
-            panelButtons.Controls.Add(btnCopy);
-            panelButtons.Controls.Add(btnClose);
-
-            this.Controls.Add(txtLog);
-            this.Controls.Add(lblTitle);
-            this.Controls.Add(panelButtons);
+            btnClose.Click += (s, e) => this.Close();
+            this.Controls.Add(btnClose);
 
             this.CancelButton = btnCancel;
         }
