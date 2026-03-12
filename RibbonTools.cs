@@ -11,7 +11,7 @@ namespace jtools_outlook
 {
     public partial class RibbonTools
     {
-        private const string AppVersion = "v1.1.0";
+        private const string AppVersion = "v1.1.1";
 
         private void RibbonTools_Load(object sender, RibbonUIEventArgs e)
         {
@@ -328,10 +328,9 @@ namespace jtools_outlook
         {
             try
             {
-                // 使用新的向导窗口
-                using (var wizardForm = new DownloadOnlineWizardForm(Globals.ThisAddIn.Application))
+                using (var form = new DownloadOnlineForm(Globals.ThisAddIn.Application))
                 {
-                    wizardForm.ShowDialog();
+                    form.ShowDialog();
                 }
             }
             catch (System.Exception ex)

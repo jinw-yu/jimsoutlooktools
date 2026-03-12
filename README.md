@@ -1,6 +1,6 @@
 # JTools
 
-[![版本](https://img.shields.io/badge/版本-v1.0.9-blue)](https://gitee.com/jasonw-yu/jtools-outlook)
+[![版本](https://img.shields.io/badge/版本-v1.1.1-blue)](https://gitee.com/jasonw-yu/jtools-outlook)
 [![协议](https://img.shields.io/badge/协议-MIT-green)](LICENSE)
 
 > ⚠️ **Vibe Coding 警告**
